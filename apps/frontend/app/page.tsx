@@ -4,7 +4,7 @@ import { Nav } from "@/components/Nav";
 export default function HomePage() {
   return (
     <>
-      <Nav publicOnly />
+      <Nav />
       <main className="mx-auto grid min-h-[calc(100vh-5rem)] w-[min(1200px,calc(100%-2rem))] items-center gap-10 py-12 lg:grid-cols-[1.05fr_.95fr]">
         <section>
           <p className="mb-4 font-bold text-mint">Realtime Donate Platform for Streamers</p>

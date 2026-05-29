@@ -56,24 +56,27 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
     router.push("/");
   }
 
+  const showPublicMenu = !loggedIn || publicOnly;
+  const showAppMenu = loggedIn && !publicOnly;
+
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-ink/80 px-5 py-4 backdrop-blur">
-      <Link href="/" className="flex items-center gap-3 font-extrabold">
+      <Link href={loggedIn ? (approved ? "/dashboard" : "/settings/profile") : "/"} className="flex items-center gap-3 font-extrabold">
         <span className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-mint to-coral text-ink">TH</span>
         <span>TipHouse</span>
       </Link>
       <nav className="flex flex-wrap gap-2 text-sm text-white/70">
-        <Link className="btn min-h-9 px-3 py-1" href="/">หน้าแรก</Link>
-        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">หน้าโดเนท</Link>}
-        {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/register">สมัครใช้งาน</Link>}
-        {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
-        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
-        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">จัดการโปรไฟล์</Link>}
-        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
-        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
-        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}
-        {loggedIn && !publicOnly && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
-        {loggedIn && !publicOnly && role === "ADMIN" && <Link className="btn min-h-9 px-3 py-1" href="/control-admin">Admin</Link>}
+        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/">หน้าแรก</Link>}
+        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/register">สมัครใช้งาน</Link>}
+        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">หน้าโดเนท</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
+        {showAppMenu && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">จัดการโปรไฟล์</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}
+        {showAppMenu && role === "ADMIN" && <Link className="btn min-h-9 px-3 py-1" href="/control-admin">Admin</Link>}
+        {showAppMenu && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
       </nav>
     </header>
   );
