@@ -3,7 +3,7 @@ services:
     name: tiphouse-backend
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run prisma:generate -w apps/backend && npm run build -w packages/types && npm run build -w apps/backend
+    buildCommand: npm ci --include=dev && npm run prisma:generate -w apps/backend && npm run build -w packages/types && npm run build -w apps/backend
     startCommand: npm run prisma:migrate -w apps/backend && npm run start -w apps/backend
     healthCheckPath: /api/health
     envVars:
@@ -40,7 +40,7 @@ services:
     name: tiphouse-frontend
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build -w packages/types && npm run build -w apps/frontend
+    buildCommand: npm ci --include=dev && npm run build -w packages/types && npm run build -w apps/frontend
     startCommand: npm exec -w apps/frontend -- next start -p $PORT
     envVars:
       - key: NODE_ENV
