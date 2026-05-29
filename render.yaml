@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 22
       - key: FRONTEND_URL
         sync: false
       - key: DATABASE_URL
@@ -41,10 +43,12 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build -w packages/types && npm run build -w apps/frontend
-    startCommand: npm exec -w apps/frontend -- next start -p $PORT
+    startCommand: npm run start:render -w apps/frontend
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 22
       - key: NEXT_PUBLIC_API_URL
         sync: false
       - key: NEXT_PUBLIC_SOCKET_URL
