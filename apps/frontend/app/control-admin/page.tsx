@@ -45,6 +45,15 @@ const tabs = [
   ["approvals", "คำขออนุมัติ"],
 ] as const;
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function isAuthError(error: unknown) {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
 function downloadExcel(rows: DonationRow[]) {
   const header = ["Creator", "Email", "Donor", "Amount", "Status", "Ref", "Message", "Created", "Paid"];
   const body = rows.map((row) => [
@@ -83,21 +92,51 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
 
   async function loadUsers() {
-    const { data } = await api.get("/admin/users", { headers: authHeaders(), params: { q: query || undefined } });
-    setUsers(data);
+    try {
+      const { data } = await api.get("/admin/users", { headers: authHeaders(), params: { q: query || undefined } });
+      setUsers(asArray<UserRow>(data));
+    } catch (error) {
+      setUsers([]);
+      if (isAuthError(error)) {
+        setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
+        clearSession();
+        return;
+      }
+      setMessage("โหลดรายการ User ไม่สำเร็จ");
+    }
   }
 
   async function loadTransactions() {
-    const { data } = await api.get("/admin/transactions", {
-      headers: authHeaders(),
-      params: { q: query || undefined, status: status || undefined },
-    });
-    setTransactions(data);
+    try {
+      const { data } = await api.get("/admin/transactions", {
+        headers: authHeaders(),
+        params: { q: query || undefined, status: status || undefined },
+      });
+      setTransactions(asArray<DonationRow>(data));
+    } catch (error) {
+      setTransactions([]);
+      if (isAuthError(error)) {
+        setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
+        clearSession();
+        return;
+      }
+      setMessage("โหลดรายการ transaction ไม่สำเร็จ");
+    }
   }
 
   async function loadApprovals() {
-    const { data } = await api.get("/admin/approvals", { headers: authHeaders(), params: { status: "PENDING" } });
-    setApprovals(data);
+    try {
+      const { data } = await api.get("/admin/approvals", { headers: authHeaders(), params: { status: "PENDING" } });
+      setApprovals(asArray<ApprovalRow>(data));
+    } catch (error) {
+      setApprovals([]);
+      if (isAuthError(error)) {
+        setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
+        clearSession();
+        return;
+      }
+      setMessage("โหลดรายการขออนุมัติไม่สำเร็จ");
+    }
   }
 
   async function refresh() {
@@ -138,8 +177,13 @@ export default function AdminPage() {
 
   async function showUserHistory(user: UserRow) {
     setSelectedUser(user);
-    const { data } = await api.get(`/admin/transactions/user/${user.id}`, { headers: authHeaders() });
-    setUserTransactions(data);
+    try {
+      const { data } = await api.get(`/admin/transactions/user/${user.id}`, { headers: authHeaders() });
+      setUserTransactions(asArray<DonationRow>(data));
+    } catch {
+      setUserTransactions([]);
+      setMessage("โหลดประวัติ transaction ไม่สำเร็จ");
+    }
   }
 
   async function review(id: string, action: "approve" | "reject") {
@@ -185,7 +229,7 @@ export default function AdminPage() {
               <option value="REVIEW">REVIEW</option>
             </select>
           )}
-          <button className="btn" onClick={refresh} type="button">ค้นหา</button>
+          <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">ค้นหา</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
         </section>
         {message && <p className="mt-4 text-mint">{message}</p>}

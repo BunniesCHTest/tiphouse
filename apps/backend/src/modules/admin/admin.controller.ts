@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -9,13 +9,12 @@ export class AdminController {
   constructor(private readonly prisma: PrismaService) {}
 
   private requireAdmin(user: JwtUser) {
-    if (user.role !== "ADMIN") return false;
-    return true;
+    if (user.role !== "ADMIN") throw new ForbiddenException("admin role required");
   }
 
   @Get("overview")
   async overview(@CurrentUser() user: JwtUser) {
-    if (user.role !== "ADMIN") return { ok: false, reason: "admin role required" };
+    this.requireAdmin(user);
     const [users, donations, webhookLogs] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.donation.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
@@ -26,7 +25,7 @@ export class AdminController {
 
   @Get("users")
   async users(@CurrentUser() user: JwtUser, @Query("q") q?: string) {
-    if (!this.requireAdmin(user)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(user);
     return this.prisma.user.findMany({
       where: q
         ? {
@@ -45,7 +44,7 @@ export class AdminController {
 
   @Patch("users/:id")
   async updateUser(@CurrentUser() admin: JwtUser, @Param("id") id: string, @Body() body: any) {
-    if (!this.requireAdmin(admin)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(admin);
     const userData: any = {};
     for (const key of ["username", "email", "role", "accountStatus", "pendingEmail"]) {
       if (body[key] !== undefined) userData[key] = body[key];
@@ -75,7 +74,7 @@ export class AdminController {
     @Query("status") status?: string,
     @Query("userId") userId?: string,
   ) {
-    if (!this.requireAdmin(user)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(user);
     return this.prisma.donation.findMany({
       where: {
         userId: userId || undefined,
@@ -98,7 +97,7 @@ export class AdminController {
 
   @Get("transactions/user/:id")
   async userTransactions(@CurrentUser() user: JwtUser, @Param("id") id: string) {
-    if (!this.requireAdmin(user)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(user);
     return this.prisma.donation.findMany({
       where: { userId: id },
       orderBy: { createdAt: "desc" },
@@ -108,7 +107,7 @@ export class AdminController {
 
   @Get("approvals")
   async approvals(@CurrentUser() user: JwtUser, @Query("status") status?: string) {
-    if (!this.requireAdmin(user)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(user);
     return this.prisma.approvalRequest.findMany({
       where: { status: status ? (status as any) : undefined },
       orderBy: { createdAt: "desc" },
@@ -118,7 +117,7 @@ export class AdminController {
 
   @Post("approvals/:id/approve")
   async approve(@CurrentUser() admin: JwtUser, @Param("id") id: string) {
-    if (!this.requireAdmin(admin)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(admin);
     const request = await this.prisma.approvalRequest.findUniqueOrThrow({ where: { id }, include: { user: true } });
     if (request.type === "REGISTER") {
       await this.prisma.user.update({ where: { id: request.userId }, data: { accountStatus: "APPROVED" } });
@@ -139,7 +138,7 @@ export class AdminController {
 
   @Post("approvals/:id/reject")
   async reject(@CurrentUser() admin: JwtUser, @Param("id") id: string) {
-    if (!this.requireAdmin(admin)) return { ok: false, reason: "admin role required" };
+    this.requireAdmin(admin);
     const request = await this.prisma.approvalRequest.findUniqueOrThrow({ where: { id } });
     if (request.type === "EMAIL_CHANGE") {
       await this.prisma.user.update({ where: { id: request.userId }, data: { pendingEmail: null } });
