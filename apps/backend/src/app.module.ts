@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { LoggerModule } from "nestjs-pino";
 import { AdminModule } from "./modules/admin/admin.module";
+import { BootstrapService } from "./bootstrap.service";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DonationsModule } from "./modules/donations/donations.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -32,5 +33,6 @@ import { PrismaModule } from "./prisma/prisma.module";
     SettingsModule,
     AdminModule,
   ],
+  providers: [BootstrapService],
 })
 export class AppModule {}
