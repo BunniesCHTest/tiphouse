@@ -86,7 +86,7 @@ export class SettingsService {
     this.overlay.emitPaidDonation(overlay.streamerKey, {
       donorName: "Test Overlay",
       amount: 100,
-      message: "Test donation message",
+      message: "สู้ๆนะครับ",
       settings: {
         theme: overlay.theme,
         animation: overlay.animation,

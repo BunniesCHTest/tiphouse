@@ -71,7 +71,11 @@ async function ensureVoicesLoaded() {
 
 function chooseVoice(lang: string, voiceType: "female" | "male") {
   const voices = window.speechSynthesis.getVoices();
-  const sameLang = voices.filter((voice) => voice.lang.toLowerCase().startsWith(lang.toLowerCase()));
+  const languageFamily = lang.split("-")[0].toLowerCase();
+  const sameLang = voices.filter((voice) => {
+    const voiceLang = voice.lang.toLowerCase();
+    return voiceLang === lang.toLowerCase() || voiceLang.startsWith(`${languageFamily}-`);
+  });
   const malePattern = /male|man|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex|ชาย/i;
   const femalePattern = /female|woman|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna|หญิง/i;
   const pattern = voiceType === "male" ? malePattern : femalePattern;
@@ -85,7 +89,9 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
   if (!("speechSynthesis" in window) || !message.trim()) return;
   await ensureVoicesLoaded();
   await new Promise<void>((resolve) => {
-    const lang = /[\u0E00-\u0E7F]/.test(message) ? "th-TH" : "en-US";
+    const hasThai = /[\u0E00-\u0E7F]/.test(message);
+    const hasEnglish = /[A-Za-z]/.test(message);
+    const lang = hasThai ? "th-TH" : hasEnglish ? "en-US" : navigator.language || "en-US";
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = lang;
     utterance.pitch = voiceType === "male" ? 0.55 : 1.3;
