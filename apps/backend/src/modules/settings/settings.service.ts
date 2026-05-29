@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { OverlayService } from "../overlay/overlay.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
@@ -77,6 +78,16 @@ export class SettingsService {
     });
   }
 
+  async resetOverlayUrl(userId: string) {
+    await this.ensureApproved(userId);
+    const streamerKey = await this.generateUniqueStreamerKey();
+    return this.prisma.overlaySetting.upsert({
+      where: { userId },
+      update: { streamerKey },
+      create: { userId, streamerKey, theme: {}, animation: {}, ttsEnabled: true },
+    });
+  }
+
   async testOverlay(userId: string, dto?: UpdateOverlayDto) {
     await this.ensureApproved(userId);
     if (dto && Object.keys(dto).length) {
@@ -104,5 +115,13 @@ export class SettingsService {
       throw new ForbiddenException("Account is waiting for admin approval");
     }
   }
-}
 
+  private async generateUniqueStreamerKey() {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const token = randomUUID().replace(/-/g, "");
+      const existing = await this.prisma.overlaySetting.findUnique({ where: { streamerKey: token } });
+      if (!existing) return token;
+    }
+    throw new Error("Unable to generate unique overlay token");
+  }
+}

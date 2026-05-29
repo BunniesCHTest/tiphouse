@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { api } from "@/lib/api";
@@ -23,6 +23,9 @@ type OverlaySettings = {
   textColor?: string;
   ttsEnabled?: boolean;
   ttsVoice?: "female" | "male";
+  widgetHtml?: string;
+  widgetCss?: string;
+  widgetJs?: string;
 };
 
 function normalizeSettings(data: any): OverlaySettings {
@@ -35,6 +38,9 @@ function normalizeSettings(data: any): OverlaySettings {
     textColor: data?.theme?.textColor ?? "#ffffff",
     ttsEnabled: data?.ttsEnabled ?? true,
     ttsVoice: data?.theme?.ttsVoice ?? "female",
+    widgetHtml: data?.theme?.widgetHtml,
+    widgetCss: data?.theme?.widgetCss,
+    widgetJs: data?.theme?.widgetJs,
   };
 }
 
@@ -88,6 +94,23 @@ function thaiBaht(amount: number) {
 function donationSpeechText(payload: AlertPayload) {
   const donorName = payload.anonymous || payload.donorName === "Anonymous" ? "บุคคลนิรนาม" : payload.donorName;
   return `${donorName} โดเนท ${thaiBaht(payload.amount)} ข้อความว่า ${payload.message}`;
+}
+
+function fillTemplate(value: string | undefined, payload: AlertPayload, settings: OverlaySettings) {
+  if (!value) return "";
+  const donorName = payload.anonymous || payload.donorName === "Anonymous" ? "บุคคลนิรนาม" : payload.donorName;
+  const replacements: Record<string, string> = {
+    donorName,
+    amount: String(payload.amount),
+    amountBaht: thaiBaht(payload.amount),
+    message: payload.message,
+    imageUrl: settings.imageUrl ?? "",
+    textColor: settings.textColor ?? "#ffffff",
+  };
+  return Object.entries(replacements).reduce(
+    (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
+    value,
+  );
 }
 
 async function ensureVoicesLoaded() {
@@ -180,6 +203,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
   const queueRef = useRef<AlertPayload[]>([]);
   const processingRef = useRef(false);
   const settingsRef = useRef<OverlaySettings>({});
+  const widgetRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -294,6 +318,18 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
   }
 
   const textColor = settings.textColor ?? "#ffffff";
+  const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, alert, settings) : "", [alert, settings]);
+  const customCss = useMemo(() => alert ? fillTemplate(settings.widgetCss, alert, settings) : "", [alert, settings]);
+
+  useEffect(() => {
+    if (!alert || !settings.widgetJs || !widgetRef.current) return;
+    try {
+      const code = fillTemplate(settings.widgetJs, alert, settings);
+      new Function("root", "payload", "settings", code)(widgetRef.current, alert, settings);
+    } catch {
+      // Custom widget JS should never break the overlay runtime.
+    }
+  }, [alert, settings]);
 
   return (
     <main className={`grid min-h-screen bg-transparent ${positionClass(settings.position)}`}>
@@ -303,13 +339,22 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.95 }}
-            className={`mx-auto grid max-w-3xl place-items-center gap-3 bg-transparent p-5 text-center ${animationClass(settings.theme)}`}
+            className="mx-auto grid max-w-3xl place-items-center gap-3 bg-transparent p-5 text-center"
           >
-            {settings.imageUrl && (
-              <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 bg-transparent object-contain" />
+            {settings.widgetHtml ? (
+              <div ref={widgetRef} className="tiphouse-widget">
+                <style dangerouslySetInnerHTML={{ __html: customCss }} />
+                <div dangerouslySetInnerHTML={{ __html: customHtml }} />
+              </div>
+            ) : (
+              <>
+                {settings.imageUrl && (
+                  <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 bg-transparent object-contain" />
+                )}
+                <h1 className="text-4xl font-black" style={{ color: textColor }}>{alert.donorName} donated ฿{alert.amount}</h1>
+                <p className="text-2xl font-bold" style={{ color: textColor }}>{alert.message}</p>
+              </>
             )}
-            <h1 className="text-4xl font-black" style={{ color: textColor }}>{alert.donorName} donated ฿{alert.amount}</h1>
-            <p className="text-2xl font-bold" style={{ color: textColor }}>{alert.message}</p>
           </motion.section>
         )}
       </AnimatePresence>

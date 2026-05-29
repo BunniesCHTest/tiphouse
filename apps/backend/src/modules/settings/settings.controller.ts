@@ -39,6 +39,11 @@ export class SettingsController {
     return this.settings.updateOverlay(user.sub, dto);
   }
 
+  @Post("overlay/reset-url")
+  resetOverlayUrl(@CurrentUser() user: JwtUser) {
+    return this.settings.resetOverlayUrl(user.sub);
+  }
+
   @Post("overlay/test")
   testOverlay(@CurrentUser() user: JwtUser, @Body() dto: UpdateOverlayDto) {
     return this.settings.testOverlay(user.sub, dto);
