@@ -87,6 +87,7 @@ export class SettingsService {
       donorName: dto?.testDonorName ?? "Test Overlay",
       amount: Number(dto?.testAmount ?? 100),
       message: dto?.testMessage ?? "สู้ๆนะครับ",
+      anonymous: false,
       settings: {
         theme: overlay.theme,
         animation: overlay.animation,

@@ -30,7 +30,7 @@ const defaultPage: PageData = {
   goalAmount: 5000,
 };
 
-function triggerOverlay(payload: { donorName: string; amount: number; message: string }) {
+function triggerOverlay(payload: { donorName: string; amount: number; message: string; anonymous?: boolean }) {
   localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({ ...payload, nonce: Date.now() }));
 }
 
@@ -40,7 +40,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [qr, setQr] = useState<QrState | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
-  const [formState, setFormState] = useState({ donorName: "", message: "", amount: "" });
+  const [formState, setFormState] = useState({ donorName: "", message: "", amount: "", anonymous: false });
 
   useEffect(() => {
     api.get(`/page/${slug}`).then((res) => {
@@ -59,14 +59,16 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const amountNumber = Number(formState.amount || 0);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
   const canDonate = useMemo(() => {
-    return Boolean(page && formState.donorName.trim() && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
+    const hasDonorName = formState.anonymous || formState.donorName.trim();
+    return Boolean(page && hasDonorName && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
   }, [amountNumber, formState, page]);
 
   async function donate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!page || !canDonate) return;
     const form = new FormData(event.currentTarget);
-    const donorName = String(form.get("donorName") || "Anonymous");
+    const anonymous = formState.anonymous;
+    const donorName = anonymous ? "Anonymous" : String(form.get("donorName") || "");
     const message = String(form.get("message") || "");
     try {
       const { data } = await api.post("/donate", {
@@ -74,7 +76,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         donorName,
         message,
         amount: Number(form.get("amount")),
-        anonymous: form.get("anonymous") === "on",
+        anonymous,
         provider: "PROMPTPAY",
       });
       setQr({
@@ -106,9 +108,10 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
   function completePaymentCheck() {
     triggerOverlay({
-      donorName: formState.donorName || "Anonymous",
+      donorName: formState.anonymous ? "Anonymous" : formState.donorName,
       amount: amountNumber,
       message: formState.message || "Thank you!",
+      anonymous: formState.anonymous,
     });
     setSuccess(true);
   }
@@ -144,14 +147,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       <section className="mx-auto grid w-[min(1100px,calc(100%-2rem))] gap-5 py-8 lg:grid-cols-[1fr_.75fr]">
         {!qr ? (
           <form onSubmit={donate} className="card grid gap-4 p-5">
-            <label>ชื่อผู้โดเนท<input className="input mt-2" name="donorName" value={formState.donorName} onChange={(event) => setFormState({ ...formState, donorName: event.target.value })} required /></label>
+            <label>ชื่อผู้โดเนท<input className="input mt-2 disabled:cursor-not-allowed disabled:opacity-50" name="donorName" value={formState.anonymous ? "" : formState.donorName} onChange={(event) => setFormState({ ...formState, donorName: event.target.value })} placeholder={formState.anonymous ? "บุคคลนิรนาม" : ""} disabled={formState.anonymous} required={!formState.anonymous} /></label>
             <label>ข้อความ<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
             <label>
               จำนวนเงิน
               <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
               {amountTooLow && <span className="mt-2 block font-bold text-coral">ยอดโดเนทต้องไม่น้อยกว่า ฿{page.minAmount}</span>}
             </label>
-            <label className="flex gap-2 text-white/70"><input name="anonymous" type="checkbox" /> แสดงเป็น Anonymous</label>
+            <label className="flex gap-2 text-white/70"><input name="anonymous" type="checkbox" checked={formState.anonymous} onChange={(event) => setFormState({ ...formState, anonymous: event.target.checked, donorName: event.target.checked ? "" : formState.donorName })} /> แสดงเป็น Anonymous</label>
             {error && <p className="text-coral">{error}</p>}
             <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>ดำเนินการโดเนท</button>
           </form>

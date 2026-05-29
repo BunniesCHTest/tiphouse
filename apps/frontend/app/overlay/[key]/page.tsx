@@ -10,6 +10,7 @@ type AlertPayload = {
   donorName: string;
   amount: number;
   message: string;
+  anonymous?: boolean;
   settings?: unknown;
 };
 
@@ -58,6 +59,37 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function thaiNumber(value: number): string {
+  const digits = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+  const units = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
+  const number = Math.floor(Math.abs(value));
+  if (number === 0) return digits[0];
+  if (number >= 1000000) {
+    const million = Math.floor(number / 1000000);
+    const rest = number % 1000000;
+    return `${thaiNumber(million)}ล้าน${rest ? thaiNumber(rest) : ""}`;
+  }
+
+  const chars = String(number).split("").map(Number);
+  return chars.map((digit, index) => {
+    if (digit === 0) return "";
+    const place = chars.length - index - 1;
+    if (place === 1 && digit === 1) return units[place];
+    if (place === 1 && digit === 2) return `ยี่${units[place]}`;
+    if (place === 0 && digit === 1 && chars.length > 1) return "เอ็ด";
+    return `${digits[digit]}${units[place]}`;
+  }).join("");
+}
+
+function thaiBaht(amount: number) {
+  return `${thaiNumber(Number.isFinite(amount) ? amount : 0)}บาท`;
+}
+
+function donationSpeechText(payload: AlertPayload) {
+  const donorName = payload.anonymous || payload.donorName === "Anonymous" ? "บุคคลนิรนาม" : payload.donorName;
+  return `${donorName} โดเนท ${thaiBaht(payload.amount)} ข้อความว่า ${payload.message}`;
+}
+
 async function ensureVoicesLoaded() {
   if (!("speechSynthesis" in window)) return;
   if (window.speechSynthesis.getVoices().length) return;
@@ -87,7 +119,11 @@ function chooseVoice(lang: string, voiceType: "female" | "male") {
 }
 
 async function speakDonationMessage(message: string, voiceType: "female" | "male") {
-  if (!("speechSynthesis" in window) || !message.trim()) return;
+  if (!message.trim()) return;
+  if (!("speechSynthesis" in window)) {
+    if (/[\u0E00-\u0E7F]/.test(message)) await playThaiAudioFallback(message);
+    return;
+  }
   await ensureVoicesLoaded();
   await new Promise<void>((resolve) => {
     const hasThai = /[\u0E00-\u0E7F]/.test(message);
@@ -100,8 +136,7 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
       return voiceLang === lang.toLowerCase() || voiceLang.startsWith(`${family}-`);
     });
     if (hasThai && !hasMatchingVoice) {
-      resolve();
-      playThaiAudioFallback(message);
+      playThaiAudioFallback(message).finally(resolve);
       return;
     }
     const utterance = new SpeechSynthesisUtterance(message);
@@ -126,10 +161,15 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
   });
 }
 
-function playThaiAudioFallback(message: string) {
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${encodeURIComponent(message.slice(0, 180))}`;
-  const audio = new Audio(url);
-  audio.play().catch(() => undefined);
+async function playThaiAudioFallback(message: string) {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api";
+  const url = `${apiBase}/overlay/tts/th?text=${encodeURIComponent(message.slice(0, 180))}`;
+  await new Promise<void>((resolve) => {
+    const audio = new Audio(url);
+    audio.onended = () => resolve();
+    audio.onerror = () => resolve();
+    audio.play().catch(() => resolve());
+  });
 }
 
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
@@ -250,7 +290,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       });
     }
     if (!current.ttsEnabled) return;
-    await speakDonationMessage(payload.message, current.ttsVoice ?? "female");
+    await speakDonationMessage(donationSpeechText(payload), current.ttsVoice ?? "female");
   }
 
   const textColor = settings.textColor ?? "#ffffff";
