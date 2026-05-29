@@ -1,16 +1,14 @@
 services:
   - type: web
     name: tiphouse-backend
-    runtime: node
+    runtime: docker
     plan: free
-    buildCommand: npm install --include=dev --workspaces && cd apps/backend && ../../node_modules/.bin/prisma generate && cd ../.. && npm run build -w packages/types && cd apps/backend && ../../node_modules/.bin/nest build
-    startCommand: cd apps/backend && ../../node_modules/.bin/prisma migrate deploy && node dist/src/main.js
+    dockerContext: .
+    dockerfilePath: ./apps/backend/Dockerfile
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NODE_VERSION
-        value: 22
       - key: FRONTEND_URL
         sync: false
       - key: DATABASE_URL
@@ -40,18 +38,16 @@ services:
 
   - type: web
     name: tiphouse-frontend
-    runtime: node
+    runtime: docker
     plan: free
-    buildCommand: npm install --include=dev --workspaces && npm run build -w packages/types && cd apps/frontend && ./node_modules/.bin/next build
-    startCommand: cd apps/frontend && ./node_modules/.bin/next start -p $PORT
+    dockerContext: .
+    dockerfilePath: ./apps/frontend/Dockerfile
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NODE_VERSION
-        value: 22
       - key: NEXT_PUBLIC_API_URL
-        sync: false
+        value: https://tiphouse-backend.onrender.com/api
       - key: NEXT_PUBLIC_SOCKET_URL
-        sync: false
+        value: https://tiphouse-backend.onrender.com
       - key: NEXT_PUBLIC_FRONTEND_URL
-        sync: false
+        value: https://tiphouse-frontend.onrender.com
