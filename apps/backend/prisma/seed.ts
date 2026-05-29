@@ -13,6 +13,7 @@ async function main() {
       email: "creator@tiphouse.test",
       passwordHash,
       role: UserRole.USER,
+      accountStatus: "APPROVED",
     },
   });
 
@@ -52,6 +53,7 @@ async function main() {
       email: "admin@tiphouse.test",
       passwordHash: await argon2.hash("Abc@1234"),
       role: UserRole.ADMIN,
+      accountStatus: "APPROVED",
     },
   });
 }

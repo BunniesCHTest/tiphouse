@@ -12,6 +12,23 @@ enum UserRole {
   ADMIN
 }
 
+enum AccountStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum ApprovalType {
+  REGISTER
+  EMAIL_CHANGE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum DonationStatus {
   PENDING
   PAID
@@ -33,6 +50,8 @@ model User {
   email        String         @unique
   passwordHash String
   role         UserRole       @default(USER)
+  accountStatus AccountStatus @default(PENDING)
+  pendingEmail String?
   twoFaSecret  String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -40,7 +59,24 @@ model User {
   donations    Donation[]
   payout       PayoutAccount?
   overlay      OverlaySetting?
+  approvals    ApprovalRequest[]
   adminLogs    AdminLog[]     @relation("AdminLogs")
+}
+
+model ApprovalRequest {
+  id            String         @id @default(uuid())
+  userId        String
+  type          ApprovalType
+  status        ApprovalStatus @default(PENDING)
+  requestedEmail String?
+  note          String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 
 model DonationPage {
@@ -81,6 +117,9 @@ model Donation {
   updatedAt       DateTime        @updatedAt
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   page            DonationPage    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([paymentStatus, createdAt])
 }
 
 model OverlaySetting {

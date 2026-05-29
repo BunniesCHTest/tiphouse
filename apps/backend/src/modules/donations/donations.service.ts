@@ -14,6 +14,7 @@ export class DonationsService {
       include: { user: { include: { overlay: true } } },
     });
     if (!page) throw new NotFoundException("Donation page not found");
+    if (page.user.accountStatus !== "APPROVED") throw new NotFoundException("Donation page is waiting for approval");
     return {
       slug: page.slug,
       displayName: page.displayName,
@@ -41,8 +42,9 @@ export class DonationsService {
   }
 
   async createPending(dto: CreateDonationDto, meta: { ipAddress?: string; userAgent?: string }) {
-    const page = await this.prisma.donationPage.findUnique({ where: { slug: dto.pageSlug } });
+    const page = await this.prisma.donationPage.findUnique({ where: { slug: dto.pageSlug }, include: { user: true } });
     if (!page) throw new NotFoundException("Donation page not found");
+    if (page.user.accountStatus !== "APPROVED") throw new BadRequestException("Creator account is waiting for admin approval");
     if (dto.amount < page.minAmount) throw new BadRequestException(`Minimum donation is ${page.minAmount}`);
 
     const transactionRef = `TH-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;

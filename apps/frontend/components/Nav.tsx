@@ -55,6 +55,7 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/register">สมัครใช้งาน</Link>}
         {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
         {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
+        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">จัดการโปรไฟล์</Link>}
         {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
         {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
         {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}

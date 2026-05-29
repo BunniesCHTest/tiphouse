@@ -22,6 +22,7 @@ export class AuthService {
           username: dto.username,
           email: dto.email,
           passwordHash,
+          accountStatus: "PENDING",
           page: {
             create: {
               slug: dto.slug,
@@ -31,8 +32,9 @@ export class AuthService {
             },
           },
           overlay: { create: { theme: { name: "Neon Glow" }, animation: { position: "center", duration: 7 } } },
+          approvals: { create: { type: "REGISTER", note: "New account registration" } },
         },
-        select: { id: true, email: true, username: true, role: true },
+        select: { id: true, email: true, username: true, role: true, accountStatus: true },
       });
       return { user, tokens: await this.signTokens(user.id, user.email, user.role) };
     } catch (error) {
@@ -54,7 +56,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
     return {
-      user: { id: user.id, email: user.email, username: user.username, role: user.role },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role, accountStatus: user.accountStatus },
       tokens: await this.signTokens(user.id, user.email, user.role),
     };
   }

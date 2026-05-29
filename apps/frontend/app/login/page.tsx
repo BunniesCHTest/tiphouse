@@ -52,8 +52,8 @@ export default function LoginPage() {
         <p className="font-bold text-mint">Creator Login</p>
         <h1 className="mt-3 text-5xl font-black">เข้าสู่ระบบ TipHouse</h1>
         <form onSubmit={login} className="card mt-8 grid gap-4 p-5">
-          <label>Email<input className="input mt-2" name="email" type="email" defaultValue="creator@tiphouse.test" required /></label>
-          <label>Password<input className="input mt-2" name="password" type="password" defaultValue="password123" required /></label>
+          <label>Email<input className="input mt-2" name="email" type="email" placeholder="creator@tiphouse.test" required /></label>
+          <label>Password<input className="input mt-2" name="password" type="password" placeholder="password123" required /></label>
           {error && <p className="text-coral">{error}</p>}
           <button className="btn btn-primary" type="submit">Login</button>
           <button className="btn" type="button" onClick={streamlabsLogin}>Login ผ่าน Streamlabs</button>

@@ -47,7 +47,11 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setPage(res.data);
       setError("");
     }).catch(() => {
-      setPage({ ...defaultPage, slug });
+      if (["127.0.0.1", "localhost"].includes(window.location.hostname)) {
+        setPage({ ...defaultPage, slug });
+        return;
+      }
+      setPage(null);
       setError("ไม่พบหน้าโดเนทนี้ หรือ backend ยังไม่พร้อม");
     });
   }, [slug]);
@@ -80,6 +84,10 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       });
       setError("");
     } catch {
+      if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) {
+        setError("ไม่สามารถสร้าง QR ได้ กรุณาลองใหม่อีกครั้ง");
+        return;
+      }
       const transactionRef = `LOCAL-${Date.now()}`;
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240"><rect width="240" height="240" fill="white"/><text x="120" y="110" text-anchor="middle" font-family="Arial" font-size="18" fill="#071012">TipHouse QR</text><text x="120" y="140" text-anchor="middle" font-family="Arial" font-size="14" fill="#071012">${page.donationAccountName ?? "TipHouse Donate"}</text><text x="120" y="165" text-anchor="middle" font-family="Arial" font-size="14" fill="#071012">THB ${amountNumber}</text></svg>`;
       setQr({

@@ -145,7 +145,7 @@ export default function DonationPageSettings() {
         <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
           <label>ชื่อครีเอเตอร์<input className="input mt-2" name="displayName" value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value })} required /></label>
           <label>Handle<input className="input mt-2" name="handle" value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value })} required /></label>
-          <label>ลิงก์หน้าโดเนท / Slug<input className="input mt-2" name="slug" value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: event.target.value })} required /></label>
+          <label>URL หน้าโดเนท<input className="input mt-2" name="slug" value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: event.target.value })} required /></label>
           <label>ชื่อบัญชีโดเนท<input className="input mt-2" name="donationAccountName" value={settings.donationAccountName} onChange={(event) => setSettings({ ...settings, donationAccountName: event.target.value })} required /></label>
           <div>
             <label className="font-bold">รูป Banner</label>
