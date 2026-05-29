@@ -21,6 +21,7 @@ export default function ProfileSettingsPage() {
   async function load() {
     const { data } = await api.get("/settings/profile", { headers: authHeaders() });
     setProfile(data);
+    if (data?.accountStatus) localStorage.setItem("tiphouse_account_status", data.accountStatus);
   }
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function ProfileSettingsPage() {
         { headers: authHeaders() },
       );
       setProfile(data);
+      if (data?.accountStatus) localStorage.setItem("tiphouse_account_status", data.accountStatus);
       setMessage("บันทึกข้อมูลแล้ว หากเปลี่ยนอีเมลต้องรอ Admin อนุมัติก่อนจึงจะใช้อีเมลใหม่ได้");
     } catch {
       setError("บันทึกข้อมูลไม่สำเร็จ กรุณาตรวจสอบข้อมูลซ้ำ");
@@ -46,7 +48,7 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <AuthGate>
+    <AuthGate allowPending>
       <Nav />
       <main className="mx-auto w-[min(860px,calc(100%-2rem))] py-10">
         <p className="font-bold text-mint">Account Profile</p>

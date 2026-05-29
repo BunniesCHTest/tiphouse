@@ -3,20 +3,39 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export function AuthGate({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
+export function AuthGate({ children, admin = false, allowPending = false }: { children: React.ReactNode; admin?: boolean; allowPending?: boolean }) {
   const [allowed, setAllowed] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("tiphouse_access_token");
     const role = localStorage.getItem("tiphouse_role");
-    setAllowed(Boolean(token) && (!admin || role === "ADMIN"));
+    const accountStatus = localStorage.getItem("tiphouse_account_status");
+    const isAllowedRole = Boolean(token) && (!admin || role === "ADMIN");
+    const isApproved = admin || allowPending || accountStatus === "APPROVED";
+    setAllowed(isAllowedRole && isApproved);
+    setPendingApproval(Boolean(token) && isAllowedRole && !isApproved);
     setChecked(true);
-  }, [admin]);
+  }, [admin, allowPending]);
 
   if (!checked) return <main className="grid min-h-screen place-items-center">Loading...</main>;
 
   if (!allowed) {
+    if (pendingApproval) {
+      return (
+        <main className="grid min-h-screen place-items-center px-4 text-center">
+          <section className="card max-w-lg p-6">
+            <h1 className="text-3xl font-black">รอ Admin อนุมัติบัญชี</h1>
+            <p className="mt-3 text-white/65">บัญชีนี้สมัครสำเร็จแล้ว แต่ยังไม่สามารถใช้งานระบบโดเนทและตั้งค่าต่าง ๆ ได้จนกว่า Admin จะอนุมัติ</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <Link className="btn btn-primary" href="/settings/profile">ดูสถานะโปรไฟล์</Link>
+              <Link className="btn" href="/">กลับหน้าแรก</Link>
+            </div>
+          </section>
+        </main>
+      );
+    }
     return (
       <main className="grid min-h-screen place-items-center px-4 text-center">
         <section className="card max-w-md p-6">

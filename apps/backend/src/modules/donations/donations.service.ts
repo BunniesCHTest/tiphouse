@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DonationStatus } from "@prisma/client";
 import QRCode from "qrcode";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -86,6 +86,7 @@ export class DonationsService {
   }
 
   async dashboard(userId: string) {
+    await this.ensureApproved(userId);
     const [page, donations, totals] = await Promise.all([
       this.prisma.donationPage.findUnique({ where: { userId } }),
       this.prisma.donation.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50 }),
@@ -99,6 +100,15 @@ export class DonationsService {
   }
 
   updatePage(userId: string, dto: UpdateDonationPageDto) {
-    return this.prisma.donationPage.update({ where: { userId }, data: dto });
+    return this.ensureApproved(userId).then(() =>
+      this.prisma.donationPage.update({ where: { userId }, data: dto }),
+    );
+  }
+
+  private async ensureApproved(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { accountStatus: true } });
+    if (user?.accountStatus !== "APPROVED") {
+      throw new ForbiddenException("Account is waiting for admin approval");
+    }
   }
 }

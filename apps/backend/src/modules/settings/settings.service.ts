@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
@@ -7,7 +7,8 @@ import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  getPayout(userId: string) {
+  async getPayout(userId: string) {
+    await this.ensureApproved(userId);
     return this.prisma.payoutAccount.findUnique({ where: { userId } });
   }
 
@@ -34,7 +35,8 @@ export class SettingsService {
     return this.getProfile(userId);
   }
 
-  upsertPayout(userId: string, dto: UpsertPayoutDto) {
+  async upsertPayout(userId: string, dto: UpsertPayoutDto) {
+    await this.ensureApproved(userId);
     return this.prisma.payoutAccount.upsert({
       where: { userId },
       update: dto,
@@ -42,11 +44,13 @@ export class SettingsService {
     });
   }
 
-  getOverlay(userId: string) {
+  async getOverlay(userId: string) {
+    await this.ensureApproved(userId);
     return this.prisma.overlaySetting.findUnique({ where: { userId } });
   }
 
-  updateOverlay(userId: string, dto: UpdateOverlayDto) {
+  async updateOverlay(userId: string, dto: UpdateOverlayDto) {
+    await this.ensureApproved(userId);
     const theme = dto.theme as Prisma.InputJsonValue | undefined;
     const animation = dto.animation as Prisma.InputJsonValue | undefined;
     return this.prisma.overlaySetting.upsert({
@@ -67,5 +71,12 @@ export class SettingsService {
         animation: animation ?? {},
       },
     });
+  }
+
+  private async ensureApproved(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { accountStatus: true } });
+    if (user?.accountStatus !== "APPROVED") {
+      throw new ForbiddenException("Account is waiting for admin approval");
+    }
   }
 }
