@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AuthGate } from "@/components/AuthGate";
 import { api, authHeaders } from "@/lib/api";
+import { clearSession } from "@/lib/session";
 
 type UserRow = {
   id: string;
@@ -69,6 +71,7 @@ function downloadExcel(rows: DonationRow[]) {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [active, setActive] = useState<(typeof tabs)[number][0]>("users");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [transactions, setTransactions] = useState<DonationRow[]>([]);
@@ -147,11 +150,21 @@ export default function AdminPage() {
 
   const totalRevenue = useMemo(() => transactions.reduce((sum, row) => sum + (row.paymentStatus === "PAID" ? row.amount : 0), 0), [transactions]);
 
+  function logout() {
+    clearSession();
+    router.push("/control-admin/login");
+  }
+
   return (
     <AuthGate admin>
       <main className="mx-auto w-[min(1400px,calc(100%-2rem))] py-10">
-        <p className="font-bold text-mint">Admin URL: /control-admin</p>
-        <h1 className="mt-3 text-5xl font-black">TipHouse Admin</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="font-bold text-mint">Admin URL: /control-admin</p>
+            <h1 className="mt-3 text-5xl font-black">TipHouse Admin</h1>
+          </div>
+          <button className="btn" type="button" onClick={logout}>Logout</button>
+        </div>
         <nav className="mt-8 flex flex-wrap gap-2">
           {tabs.map(([key, label]) => (
             <button key={key} className={`btn ${active === key ? "btn-primary" : ""}`} onClick={() => setActive(key)} type="button">
