@@ -1,8 +1,8 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { OverlayService } from "../overlay/overlay.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
-import { OverlayService } from "../overlay/overlay.service";
 
 @Injectable()
 export class SettingsService {
@@ -86,7 +86,7 @@ export class SettingsService {
     this.overlay.emitPaidDonation(overlay.streamerKey, {
       donorName: "Test Overlay",
       amount: 100,
-      message: "ทดสอบข้อความโดเนท",
+      message: "Test donation message",
       settings: {
         theme: overlay.theme,
         animation: overlay.animation,

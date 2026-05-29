@@ -55,6 +55,14 @@ export class PaymentsService {
         message: donation.message,
         anonymous: donation.anonymous,
         createdAt: donation.paidAt?.toISOString() ?? new Date().toISOString(),
+        settings: donation.user.overlay
+          ? {
+              theme: donation.user.overlay.theme,
+              animation: donation.user.overlay.animation,
+              soundUrl: donation.user.overlay.soundUrl,
+              ttsEnabled: donation.user.overlay.ttsEnabled,
+            }
+          : undefined,
       });
     }
     return { ok: true, donationId: donation.id };

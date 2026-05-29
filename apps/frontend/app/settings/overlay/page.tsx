@@ -140,7 +140,6 @@ export default function OverlaySettingsPage() {
   async function testOverlay() {
     setTestVisible(true);
     localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
-    localStorage.setItem("tiphouse_overlay_test", JSON.stringify({ streamerKey: settings.streamerKey, nonce: Date.now() }));
     await api.post("/settings/overlay/test", overlayPayload(settings), { headers: authHeaders() }).catch(() => undefined);
     window.setTimeout(() => setTestVisible(false), settings.durationSeconds * 1000);
   }

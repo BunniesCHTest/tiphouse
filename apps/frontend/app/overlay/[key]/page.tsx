@@ -9,7 +9,7 @@ type AlertPayload = {
   donorName: string;
   amount: number;
   message: string;
-  settings?: any;
+  settings?: unknown;
 };
 
 type OverlaySettings = {
@@ -21,12 +21,6 @@ type OverlaySettings = {
   textColor?: string;
   ttsEnabled?: boolean;
   ttsVoice?: "female" | "male";
-};
-
-const previewAlert: AlertPayload = {
-  donorName: "Test Overlay",
-  amount: 100,
-  message: "ทดสอบข้อความโดเนท",
 };
 
 function normalizeSettings(data: any): OverlaySettings {
@@ -63,15 +57,54 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function ensureVoicesLoaded() {
-  if (!("speechSynthesis" in window)) return Promise.resolve();
-  if (window.speechSynthesis.getVoices().length) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(() => resolve(), 800);
+async function ensureVoicesLoaded() {
+  if (!("speechSynthesis" in window)) return;
+  if (window.speechSynthesis.getVoices().length) return;
+  await new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, 1000);
     window.speechSynthesis.onvoiceschanged = () => {
       window.clearTimeout(timer);
       resolve();
     };
+  });
+}
+
+function chooseVoice(lang: string, voiceType: "female" | "male") {
+  const voices = window.speechSynthesis.getVoices();
+  const sameLang = voices.filter((voice) => voice.lang.toLowerCase().startsWith(lang.toLowerCase()));
+  const malePattern = /male|man|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex|ชาย/i;
+  const femalePattern = /female|woman|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna|หญิง/i;
+  const pattern = voiceType === "male" ? malePattern : femalePattern;
+  return sameLang.find((voice) => pattern.test(voice.name))
+    ?? voices.find((voice) => pattern.test(voice.name))
+    ?? sameLang[0]
+    ?? voices[0];
+}
+
+async function speakDonationMessage(message: string, voiceType: "female" | "male") {
+  if (!("speechSynthesis" in window) || !message.trim()) return;
+  await ensureVoicesLoaded();
+  await new Promise<void>((resolve) => {
+    const lang = /[\u0E00-\u0E7F]/.test(message) ? "th-TH" : "en-US";
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.lang = lang;
+    utterance.pitch = voiceType === "male" ? 0.55 : 1.3;
+    utterance.rate = voiceType === "male" ? 0.9 : 1.03;
+    utterance.volume = 1;
+    const voice = chooseVoice(lang, voiceType);
+    if (voice) utterance.voice = voice;
+    const keepAlive = window.setInterval(() => window.speechSynthesis.resume(), 250);
+    const done = () => {
+      window.clearInterval(keepAlive);
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = window.setTimeout(done, Math.max(2500, message.length * 180));
+    utterance.onend = done;
+    utterance.onerror = done;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    window.setTimeout(() => window.speechSynthesis.speak(utterance), 80);
   });
 }
 
@@ -87,6 +120,23 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     settingsRef.current = settings;
   }, [settings]);
 
+  async function loadSettings() {
+    const local = readLocalSettings(key);
+    if (Object.keys(local).length) {
+      settingsRef.current = local;
+      setSettings(local);
+    }
+    try {
+      const { data } = await api.get(`/overlay/${key}`);
+      const next = normalizeSettings(data);
+      settingsRef.current = next;
+      setSettings(next);
+      localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
+    } catch {
+      // Keep current settings if backend is waking up.
+    }
+  }
+
   useEffect(() => {
     const previousBodyBackground = document.body.style.background;
     const previousHtmlBackground = document.documentElement.style.background;
@@ -95,33 +145,12 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     document.documentElement.style.background = "transparent";
     document.body.style.overflow = "hidden";
 
-    async function loadSettings() {
-      const local = readLocalSettings(key);
-      if (Object.keys(local).length) {
-        settingsRef.current = local;
-        setSettings(local);
-      }
-      try {
-        const { data } = await api.get(`/overlay/${key}`);
-        const next = normalizeSettings(data);
-        settingsRef.current = next;
-        setSettings(next);
-        localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
-      } catch {
-        // Keep the overlay transparent and connected even if settings are not found yet.
-      }
-    }
-
     loadSettings();
     const onStorage = (event: StorageEvent) => {
       if (event.key === `tiphouse_overlay_settings:${key}`) {
         const next = readLocalSettings(key);
         settingsRef.current = next;
         setSettings(next);
-      }
-      if (event.key === "tiphouse_overlay_test" && event.newValue) {
-        const payload = JSON.parse(event.newValue);
-        if (!payload.streamerKey || payload.streamerKey === key) enqueueAlert(previewAlert);
       }
       if (event.key === "tiphouse_overlay_donation" && event.newValue) {
         enqueueAlert(JSON.parse(event.newValue) as AlertPayload);
@@ -149,15 +178,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         setSettings(next);
         localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
       } else {
-        try {
-          const { data } = await api.get(`/overlay/${key}`);
-          const next = normalizeSettings(data);
-          settingsRef.current = next;
-          setSettings(next);
-          localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
-        } catch {
-          // Keep current settings if backend is waking up.
-        }
+        await loadSettings();
       }
       enqueueAlert(payload);
     });
@@ -195,23 +216,8 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         audio.play().catch(() => resolve());
       });
     }
-    if (!current.ttsEnabled || !("speechSynthesis" in window)) return;
-    await ensureVoicesLoaded();
-    const utterance = new SpeechSynthesisUtterance(payload.message);
-    utterance.lang = /[ก-๙]/.test(payload.message) ? "th-TH" : "en-US";
-    utterance.pitch = current.ttsVoice === "male" ? 0.55 : 1.35;
-    utterance.rate = current.ttsVoice === "male" ? 0.92 : 1.04;
-    const voices = window.speechSynthesis.getVoices();
-    const malePattern = /male|man|ชาย|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex/i;
-    const femalePattern = /female|woman|หญิง|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna/i;
-    const sameLangVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith(utterance.lang.toLowerCase()));
-    const preferred = sameLangVoices.find((voice) => current.ttsVoice === "male" ? malePattern.test(voice.name) : femalePattern.test(voice.name))
-      ?? voices.find((voice) => current.ttsVoice === "male" ? malePattern.test(voice.name) : femalePattern.test(voice.name))
-      ?? sameLangVoices[0]
-      ?? voices[0];
-    if (preferred) utterance.voice = preferred;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    if (!current.ttsEnabled) return;
+    await speakDonationMessage(payload.message, current.ttsVoice ?? "female");
   }
 
   const textColor = settings.textColor ?? "#ffffff";
