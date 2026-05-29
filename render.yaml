@@ -3,8 +3,8 @@ services:
     name: tiphouse-backend
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npm run prisma:generate -w apps/backend && npm run build -w packages/types && npm run build -w apps/backend
-    startCommand: npm run prisma:migrate -w apps/backend && npm run start -w apps/backend
+    buildCommand: npm install --include=dev --workspaces && cd apps/backend && ../../node_modules/.bin/prisma generate && cd ../.. && npm run build -w packages/types && cd apps/backend && ../../node_modules/.bin/nest build
+    startCommand: cd apps/backend && ../../node_modules/.bin/prisma migrate deploy && node dist/src/main.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -42,8 +42,8 @@ services:
     name: tiphouse-frontend
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npm run build -w packages/types && npm run build -w apps/frontend
-    startCommand: npm run start:render -w apps/frontend
+    buildCommand: npm install --include=dev --workspaces && npm run build -w packages/types && cd apps/frontend && ./node_modules/.bin/next build
+    startCommand: cd apps/frontend && ./node_modules/.bin/next start -p $PORT
     envVars:
       - key: NODE_ENV
         value: production
