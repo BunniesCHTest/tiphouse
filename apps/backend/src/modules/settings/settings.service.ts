@@ -2,10 +2,14 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
+import { OverlayService } from "../overlay/overlay.service";
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly overlay: OverlayService,
+  ) {}
 
   async getPayout(userId: string) {
     await this.ensureApproved(userId);
@@ -71,6 +75,17 @@ export class SettingsService {
         animation: animation ?? {},
       },
     });
+  }
+
+  async testOverlay(userId: string) {
+    await this.ensureApproved(userId);
+    const overlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
+    this.overlay.emitPaidDonation(overlay.streamerKey, {
+      donorName: "Test Overlay",
+      amount: 100,
+      message: "ทดสอบข้อความโดเนท",
+    });
+    return { ok: true, streamerKey: overlay.streamerKey };
   }
 
   private async ensureApproved(userId: string) {

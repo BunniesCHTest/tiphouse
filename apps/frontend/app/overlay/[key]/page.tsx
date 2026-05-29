@@ -23,9 +23,9 @@ type OverlaySettings = {
 };
 
 const previewAlert: AlertPayload = {
-  donorName: "Anonymous",
+  donorName: "Test Overlay",
   amount: 100,
-  message: "สู้ๆนะ",
+  message: "ทดสอบข้อความโดเนท",
 };
 
 function normalizeSettings(data: any): OverlaySettings {
@@ -41,10 +41,10 @@ function normalizeSettings(data: any): OverlaySettings {
   };
 }
 
-function themeClass(theme?: OverlaySettings["theme"]) {
-  if (theme === "Anime Bounce") return "border-pink-300/50 bg-[#201225]/90 shadow-[0_0_80px_rgba(245,123,193,.3)]";
-  if (theme === "Minimal Slide") return "border-white/30 bg-white/95 shadow-2xl";
-  return "border-mint/50 bg-[#071012]/90 shadow-[0_0_80px_rgba(56,226,194,.32)]";
+function animationClass(theme?: OverlaySettings["theme"]) {
+  if (theme === "Anime Bounce") return "drop-shadow-[0_0_28px_rgba(245,123,193,.7)]";
+  if (theme === "Minimal Slide") return "drop-shadow-[0_8px_22px_rgba(0,0,0,.45)]";
+  return "drop-shadow-[0_0_28px_rgba(56,226,194,.7)]";
 }
 
 function positionClass(position?: OverlaySettings["position"]) {
@@ -58,8 +58,20 @@ function readLocalSettings(key: string) {
   return raw ? (JSON.parse(raw) as OverlaySettings) : {};
 }
 
-async function wait(ms: number) {
+function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function ensureVoicesLoaded() {
+  if (!("speechSynthesis" in window)) return Promise.resolve();
+  if (window.speechSynthesis.getVoices().length) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(() => resolve(), 800);
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+  });
 }
 
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
@@ -75,6 +87,13 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
   }, [settings]);
 
   useEffect(() => {
+    const previousBodyBackground = document.body.style.background;
+    const previousHtmlBackground = document.documentElement.style.background;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.background = "transparent";
+    document.documentElement.style.background = "transparent";
+    document.body.style.overflow = "hidden";
+
     const loadSettings = async () => {
       const local = readLocalSettings(key);
       if (Object.keys(local).length) {
@@ -88,7 +107,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         setSettings(next);
         localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
       } catch {
-        // OBS can still use local test settings when backend is sleeping.
+        // Keep the overlay transparent and connected even if settings are not found yet.
       }
     };
 
@@ -110,6 +129,9 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", loadSettings);
     return () => {
+      document.body.style.background = previousBodyBackground;
+      document.documentElement.style.background = previousHtmlBackground;
+      document.body.style.overflow = previousOverflow;
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", loadSettings);
     };
@@ -156,16 +178,19 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       });
     }
     if (!current.ttsEnabled || !("speechSynthesis" in window)) return;
+    await ensureVoicesLoaded();
     const utterance = new SpeechSynthesisUtterance(payload.message);
     utterance.lang = /[ก-๙]/.test(payload.message) ? "th-TH" : "en-US";
-    utterance.pitch = current.ttsVoice === "male" ? 0.75 : 1.15;
-    utterance.rate = 1;
+    utterance.pitch = current.ttsVoice === "male" ? 0.55 : 1.35;
+    utterance.rate = current.ttsVoice === "male" ? 0.92 : 1.04;
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((voice) => voice.lang.startsWith(utterance.lang) && (
-      current.ttsVoice === "male"
-        ? /male|ชาย|narong|kitt/i.test(voice.name)
-        : /female|หญิง|siri|kanya|google/i.test(voice.name)
-    )) ?? voices.find((voice) => voice.lang.startsWith(utterance.lang));
+    const malePattern = /male|man|ชาย|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex/i;
+    const femalePattern = /female|woman|หญิง|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna/i;
+    const sameLangVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith(utterance.lang.toLowerCase()));
+    const preferred = sameLangVoices.find((voice) => current.ttsVoice === "male" ? malePattern.test(voice.name) : femalePattern.test(voice.name))
+      ?? voices.find((voice) => current.ttsVoice === "male" ? malePattern.test(voice.name) : femalePattern.test(voice.name))
+      ?? sameLangVoices[0]
+      ?? voices[0];
     if (preferred) utterance.voice = preferred;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
@@ -181,15 +206,13 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.95 }}
-            className={`mx-auto grid max-w-3xl place-items-center gap-3 rounded-2xl border p-5 text-center ${themeClass(settings.theme)}`}
+            className={`mx-auto grid max-w-3xl place-items-center gap-3 bg-transparent p-5 text-center ${animationClass(settings.theme)}`}
           >
-            {settings.imageUrl ? (
-              <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 rounded-2xl bg-transparent object-contain shadow-2xl" />
-            ) : (
-              <div className="grid size-28 place-items-center rounded-2xl bg-mint text-3xl font-black text-ink">TH</div>
+            {settings.imageUrl && (
+              <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 bg-transparent object-contain" />
             )}
             <h1 className="text-4xl font-black" style={{ color: textColor }}>{alert.donorName} donated ฿{alert.amount}</h1>
-            <p className="text-2xl" style={{ color: textColor }}>{alert.message}</p>
+            <p className="text-2xl font-bold" style={{ color: textColor }}>{alert.message}</p>
           </motion.section>
         )}
       </AnimatePresence>

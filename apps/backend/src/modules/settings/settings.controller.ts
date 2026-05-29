@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { UpdateProfileDto, UpsertPayoutDto, UpdateOverlayDto } from "./dto";
@@ -37,5 +37,10 @@ export class SettingsController {
   @Patch("overlay")
   updateOverlay(@CurrentUser() user: JwtUser, @Body() dto: UpdateOverlayDto) {
     return this.settings.updateOverlay(user.sub, dto);
+  }
+
+  @Post("overlay/test")
+  testOverlay(@CurrentUser() user: JwtUser) {
+    return this.settings.testOverlay(user.sub);
   }
 }
