@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(56, 226, 194, 0.18), transparent 28rem),
+    radial-gradient(circle at 85% 18%, rgba(255, 125, 103, 0.13), transparent 22rem),
+    linear-gradient(135deg, #071012 0%, #0d171a 42%, #102124 100%);
+  color: #eef8f7;
+  font-family: Inter, "Noto Sans Thai", system-ui, sans-serif;
+}
+
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(16, 27, 30, 0.78);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.btn {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.75rem 1rem;
+  font-weight: 800;
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #38e2c2, #a6f7c4);
+  color: #071012;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.82rem 0.9rem;
+  outline: none;
+}
+
+.badge {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(56, 226, 194, 0.13);
+  color: #a6f7c4;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+}

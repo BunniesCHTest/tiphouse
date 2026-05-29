@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: tiphouse-backend
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run prisma:generate -w apps/backend && npm run build -w packages/types && npm run build -w apps/backend
+    startCommand: npm run prisma:migrate -w apps/backend && npm run start -w apps/backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: OMISE_PUBLIC_KEY
+        sync: false
+      - key: OMISE_SECRET_KEY
+        sync: false
+      - key: OMISE_WEBHOOK_SECRET
+        sync: false
+      - key: GBPRIMEPAY_MERCHANT_ID
+        sync: false
+      - key: GBPRIMEPAY_SECRET
+        sync: false
+      - key: STREAMLABS_CLIENT_ID
+        sync: false
+      - key: STREAMLABS_CLIENT_SECRET
+        sync: false
+      - key: STREAMLABS_REDIRECT_URI
+        sync: false
+
+  - type: web
+    name: tiphouse-frontend
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build -w packages/types && npm run build -w apps/frontend
+    startCommand: npm exec -w apps/frontend -- next start -p $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_SOCKET_URL
+        sync: false
+      - key: NEXT_PUBLIC_FRONTEND_URL
+        sync: false
