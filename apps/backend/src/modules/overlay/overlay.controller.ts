@@ -11,6 +11,7 @@ export class OverlayController {
     const audio = await this.overlay.generateThaiTts(text || "");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.send(audio);
   }
 

@@ -120,25 +120,17 @@ function chooseVoice(lang: string, voiceType: "female" | "male") {
 
 async function speakDonationMessage(message: string, voiceType: "female" | "male") {
   if (!message.trim()) return;
-  if (!("speechSynthesis" in window)) {
-    if (/[\u0E00-\u0E7F]/.test(message)) await playThaiAudioFallback(message);
+
+  // OBS Browser Source is inconsistent with Thai speechSynthesis voices, so Thai always uses backend audio.
+  if (/[\u0E00-\u0E7F]/.test(message)) {
+    await playThaiAudioFallback(message);
     return;
   }
+
+  if (!("speechSynthesis" in window)) return;
   await ensureVoicesLoaded();
   await new Promise<void>((resolve) => {
-    const hasThai = /[\u0E00-\u0E7F]/.test(message);
-    const hasEnglish = /[A-Za-z]/.test(message);
-    const lang = hasThai ? "th-TH" : hasEnglish ? "en-US" : navigator.language || "en-US";
-    const voices = window.speechSynthesis.getVoices();
-    const hasMatchingVoice = voices.some((voice) => {
-      const voiceLang = voice.lang.toLowerCase();
-      const family = lang.split("-")[0].toLowerCase();
-      return voiceLang === lang.toLowerCase() || voiceLang.startsWith(`${family}-`);
-    });
-    if (hasThai && !hasMatchingVoice) {
-      playThaiAudioFallback(message).finally(resolve);
-      return;
-    }
+    const lang = /[A-Za-z]/.test(message) ? "en-US" : navigator.language || "en-US";
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = lang;
     utterance.pitch = voiceType === "male" ? 0.55 : 1.3;
@@ -163,12 +155,20 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
 
 async function playThaiAudioFallback(message: string) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api";
-  const url = `${apiBase}/overlay/tts/th?text=${encodeURIComponent(message.slice(0, 180))}`;
-  await new Promise<void>((resolve) => {
+  const text = encodeURIComponent(message.slice(0, 180));
+  const backendUrl = `${apiBase}/overlay/tts/th?text=${text}`;
+  const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${text}`;
+  const played = await playAudioUrl(backendUrl);
+  if (!played) await playAudioUrl(directUrl);
+}
+
+async function playAudioUrl(url: string) {
+  return new Promise<boolean>((resolve) => {
     const audio = new Audio(url);
-    audio.onended = () => resolve();
-    audio.onerror = () => resolve();
-    audio.play().catch(() => resolve());
+    audio.preload = "auto";
+    audio.onended = () => resolve(true);
+    audio.onerror = () => resolve(false);
+    audio.play().catch(() => resolve(false));
   });
 }
 
