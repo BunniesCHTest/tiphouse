@@ -45,6 +45,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3000
       - key: NEXT_PUBLIC_API_URL
         value: https://tiphouse-backend.onrender.com/api
       - key: NEXT_PUBLIC_SOCKET_URL
