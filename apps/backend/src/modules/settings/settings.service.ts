@@ -77,13 +77,22 @@ export class SettingsService {
     });
   }
 
-  async testOverlay(userId: string) {
+  async testOverlay(userId: string, dto?: UpdateOverlayDto) {
     await this.ensureApproved(userId);
+    if (dto && Object.keys(dto).length) {
+      await this.updateOverlay(userId, dto);
+    }
     const overlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
     this.overlay.emitPaidDonation(overlay.streamerKey, {
       donorName: "Test Overlay",
       amount: 100,
       message: "ทดสอบข้อความโดเนท",
+      settings: {
+        theme: overlay.theme,
+        animation: overlay.animation,
+        soundUrl: overlay.soundUrl,
+        ttsEnabled: overlay.ttsEnabled,
+      },
     });
     return { ok: true, streamerKey: overlay.streamerKey };
   }

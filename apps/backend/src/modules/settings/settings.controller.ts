@@ -40,7 +40,7 @@ export class SettingsController {
   }
 
   @Post("overlay/test")
-  testOverlay(@CurrentUser() user: JwtUser) {
-    return this.settings.testOverlay(user.sub);
+  testOverlay(@CurrentUser() user: JwtUser, @Body() dto: UpdateOverlayDto) {
+    return this.settings.testOverlay(user.sub, dto);
   }
 }

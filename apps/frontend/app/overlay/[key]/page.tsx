@@ -9,6 +9,7 @@ type AlertPayload = {
   donorName: string;
   amount: number;
   message: string;
+  settings?: any;
 };
 
 type OverlaySettings = {
@@ -30,9 +31,9 @@ const previewAlert: AlertPayload = {
 
 function normalizeSettings(data: any): OverlaySettings {
   return {
-    theme: data?.theme?.name ?? data?.theme,
-    position: data?.animation?.position,
-    durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration,
+    theme: data?.theme?.name ?? data?.theme?.theme ?? data?.theme,
+    position: data?.animation?.position ?? data?.position,
+    durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? data?.durationSeconds,
     soundUrl: data?.soundUrl,
     imageUrl: data?.theme?.imageUrl ?? data?.imageUrl,
     textColor: data?.theme?.textColor ?? "#ffffff",
@@ -94,7 +95,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     document.documentElement.style.background = "transparent";
     document.body.style.overflow = "hidden";
 
-    const loadSettings = async () => {
+    async function loadSettings() {
       const local = readLocalSettings(key);
       if (Object.keys(local).length) {
         settingsRef.current = local;
@@ -109,7 +110,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       } catch {
         // Keep the overlay transparent and connected even if settings are not found yet.
       }
-    };
+    }
 
     loadSettings();
     const onStorage = (event: StorageEvent) => {
@@ -138,11 +139,28 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
   }, [key]);
 
   useEffect(() => {
-    const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://127.0.0.1:4000"}/overlay`, {
-      transports: ["websocket"],
-    });
+    const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://127.0.0.1:4000"}/overlay`);
     socket.emit("join_overlay", { streamerKey: key });
-    socket.on("new_donation", (payload: AlertPayload) => enqueueAlert(payload));
+    socket.on("connect", () => socket.emit("join_overlay", { streamerKey: key }));
+    socket.on("new_donation", async (payload: AlertPayload) => {
+      if (payload.settings) {
+        const next = normalizeSettings(payload.settings);
+        settingsRef.current = next;
+        setSettings(next);
+        localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
+      } else {
+        try {
+          const { data } = await api.get(`/overlay/${key}`);
+          const next = normalizeSettings(data);
+          settingsRef.current = next;
+          setSettings(next);
+          localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
+        } catch {
+          // Keep current settings if backend is waking up.
+        }
+      }
+      enqueueAlert(payload);
+    });
     return () => {
       socket.disconnect();
     };
