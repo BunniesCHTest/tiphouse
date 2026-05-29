@@ -10,19 +10,35 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
   const [role, setRole] = useState("");
+  const [approved, setApproved] = useState(false);
   const [donationSlug, setDonationSlug] = useState("bunniesch");
 
   useEffect(() => {
-    setLoggedIn(Boolean(localStorage.getItem("tiphouse_access_token")));
-    setRole(localStorage.getItem("tiphouse_role") ?? "");
+    const token = localStorage.getItem("tiphouse_access_token");
+    const storedRole = localStorage.getItem("tiphouse_role") ?? "";
+    const storedStatus = localStorage.getItem("tiphouse_account_status") ?? "";
+    setLoggedIn(Boolean(token));
+    setRole(storedRole);
+    setApproved(storedRole === "ADMIN" || storedStatus === "APPROVED");
+
     const cached = localStorage.getItem(userCacheKey("donation_slug"));
     if (cached) setDonationSlug(cached);
-    api.get("/dashboard", { headers: authHeaders() }).then((res) => {
-      if (res.data?.page?.slug) {
-        setDonationSlug(res.data.page.slug);
-        localStorage.setItem(userCacheKey("donation_slug"), res.data.page.slug);
-      }
-    }).catch(() => undefined);
+
+    if (token) {
+      api.get("/settings/profile", { headers: authHeaders() }).then((res) => {
+        const nextRole = res.data?.role ?? storedRole;
+        const nextStatus = res.data?.accountStatus ?? storedStatus;
+        const nextSlug = res.data?.page?.slug;
+        localStorage.setItem("tiphouse_role", nextRole);
+        localStorage.setItem("tiphouse_account_status", nextStatus);
+        setRole(nextRole);
+        setApproved(nextRole === "ADMIN" || nextStatus === "APPROVED");
+        if (nextSlug) {
+          setDonationSlug(nextSlug);
+          localStorage.setItem(userCacheKey("donation_slug"), nextSlug);
+        }
+      }).catch(() => undefined);
+    }
 
     const onPageUpdated = (event: Event) => {
       const detail = (event as CustomEvent<{ slug?: string }>).detail;
@@ -36,6 +52,7 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
     clearSession();
     setLoggedIn(false);
     setRole("");
+    setApproved(false);
     router.push("/");
   }
 
@@ -47,18 +64,14 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
       </Link>
       <nav className="flex flex-wrap gap-2 text-sm text-white/70">
         <Link className="btn min-h-9 px-3 py-1" href="/">หน้าแรก</Link>
-        {loggedIn && !publicOnly && (
-          <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">
-            หน้าโดเนท
-          </Link>
-        )}
+        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">หน้าโดเนท</Link>}
         {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/register">สมัครใช้งาน</Link>}
         {(!loggedIn || publicOnly) && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
-        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
+        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
         {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">จัดการโปรไฟล์</Link>}
-        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
-        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
-        {loggedIn && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}
+        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
+        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
+        {loggedIn && approved && !publicOnly && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}
         {loggedIn && !publicOnly && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
         {loggedIn && !publicOnly && role === "ADMIN" && <Link className="btn min-h-9 px-3 py-1" href="/control-admin">Admin</Link>}
       </nav>

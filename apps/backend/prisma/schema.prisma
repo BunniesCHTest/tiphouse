@@ -60,7 +60,20 @@ model User {
   payout       PayoutAccount?
   overlay      OverlaySetting?
   approvals    ApprovalRequest[]
+  passwordResets PasswordResetToken[]
   adminLogs    AdminLog[]     @relation("AdminLogs")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model ApprovalRequest {

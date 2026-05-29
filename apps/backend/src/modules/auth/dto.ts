@@ -39,3 +39,21 @@ export class LoginDto {
   @MinLength(8)
   password!: string;
 }
+
+export class RequestPasswordResetDto {
+  @IsEmail()
+  email!: string;
+}
+
+export class ConfirmPasswordResetDto {
+  @IsString()
+  @IsNotEmpty()
+  token!: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, {
+    message: "Password must be at least 8 characters and include uppercase, number, and special character",
+  })
+  password!: string;
+}

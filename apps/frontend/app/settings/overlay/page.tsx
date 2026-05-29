@@ -14,15 +14,19 @@ type OverlaySettings = {
   durationSeconds: number;
   soundUrl?: string;
   imageUrl?: string;
+  textColor: string;
   ttsEnabled: boolean;
+  ttsVoice: "female" | "male";
 };
 
 const defaultSettings: OverlaySettings = {
-  streamerKey: "abc123",
+  streamerKey: "",
   theme: "Neon Glow",
   position: "Center",
   durationSeconds: 7,
+  textColor: "#ffffff",
   ttsEnabled: true,
+  ttsVoice: "female",
 };
 
 function readFileAsDataUrl(file: File | null) {
@@ -44,26 +48,28 @@ function normalizeOverlay(data: any): OverlaySettings {
     durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? defaultSettings.durationSeconds,
     soundUrl: data?.soundUrl,
     imageUrl: data?.theme?.imageUrl ?? data?.imageUrl,
+    textColor: data?.theme?.textColor ?? defaultSettings.textColor,
     ttsEnabled: data?.ttsEnabled ?? true,
+    ttsVoice: data?.theme?.ttsVoice ?? defaultSettings.ttsVoice,
   };
 }
 
 function themeClass(theme: OverlaySettings["theme"]) {
-  if (theme === "Anime Bounce") return "border-pink-300/40 shadow-[0_0_60px_rgba(245,123,193,.25)]";
-  if (theme === "Minimal Slide") return "bg-white text-ink shadow-2xl";
-  return "border-mint/40 shadow-[0_0_60px_rgba(56,226,194,.25)]";
+  if (theme === "Anime Bounce") return "border-pink-300/40 bg-[#201225]/90 shadow-[0_0_60px_rgba(245,123,193,.25)]";
+  if (theme === "Minimal Slide") return "border-white/30 bg-white/95 shadow-2xl";
+  return "border-mint/40 bg-[#071012]/90 shadow-[0_0_60px_rgba(56,226,194,.25)]";
 }
 
 function AlertPreview({ settings, test }: { settings: OverlaySettings; test: boolean }) {
   return (
-    <div className={`card grid w-full max-w-xl place-items-center gap-3 p-5 text-center ${themeClass(settings.theme)}`}>
+    <div className={`grid w-full max-w-xl place-items-center gap-3 rounded-xl border p-5 text-center ${themeClass(settings.theme)}`}>
       {settings.imageUrl ? (
-        <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 rounded-2xl object-cover shadow-2xl" />
+        <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 rounded-2xl bg-transparent object-contain shadow-2xl" />
       ) : (
         <div className="grid size-28 place-items-center rounded-2xl bg-mint text-3xl font-black text-ink">TH</div>
       )}
-      <h2 className="text-3xl font-black">Anonymous donated ฿100</h2>
-      <p className="text-xl opacity-75">สู้ๆนะ</p>
+      <h2 className="text-3xl font-black" style={{ color: settings.textColor }}>Anonymous donated ฿100</h2>
+      <p className="text-xl" style={{ color: settings.textColor }}>สู้ๆนะ</p>
       {test && <span className="badge">กำลังทดสอบ Overlay</span>}
     </div>
   );
@@ -73,7 +79,7 @@ export default function OverlaySettingsPage() {
   const [saved, setSaved] = useState(false);
   const [testVisible, setTestVisible] = useState(false);
   const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
-  const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey}`;
+  const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
 
   useEffect(() => {
     const cached = localStorage.getItem(userCacheKey("overlay_settings"));
@@ -93,19 +99,26 @@ export default function OverlaySettingsPage() {
     const soundFile = form.get("soundFile") instanceof File ? (form.get("soundFile") as File) : null;
     const imageFile = form.get("imageFile") instanceof File ? (form.get("imageFile") as File) : null;
     const nextSettings: OverlaySettings = {
-      streamerKey: String(form.get("streamerKey") || "abc123"),
+      streamerKey: settings.streamerKey,
       theme: String(form.get("theme") || "Neon Glow") as OverlaySettings["theme"],
       position: String(form.get("position") || "Center") as OverlaySettings["position"],
       durationSeconds: Math.max(3, Math.min(30, Number(form.get("durationSeconds") || 7))),
       soundUrl: (await readFileAsDataUrl(soundFile && soundFile.size ? soundFile : null)) ?? settings.soundUrl,
       imageUrl: (await readFileAsDataUrl(imageFile && imageFile.size ? imageFile : null)) ?? settings.imageUrl,
+      textColor: String(form.get("textColor") || "#ffffff"),
       ttsEnabled: form.get("ttsEnabled") === "on",
+      ttsVoice: String(form.get("ttsVoice") || "female") as OverlaySettings["ttsVoice"],
     };
     await api.patch("/settings/overlay", {
       streamerKey: nextSettings.streamerKey,
       soundUrl: nextSettings.soundUrl,
       ttsEnabled: nextSettings.ttsEnabled,
-      theme: { name: nextSettings.theme, imageUrl: nextSettings.imageUrl },
+      theme: {
+        name: nextSettings.theme,
+        imageUrl: nextSettings.imageUrl,
+        textColor: nextSettings.textColor,
+        ttsVoice: nextSettings.ttsVoice,
+      },
       animation: { position: nextSettings.position, durationSeconds: nextSettings.durationSeconds },
     }, { headers: authHeaders() });
     setSettings(nextSettings);
@@ -124,10 +137,6 @@ export default function OverlaySettingsPage() {
     setTestVisible(true);
     localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
     localStorage.setItem("tiphouse_overlay_test", JSON.stringify({ streamerKey: settings.streamerKey, nonce: Date.now() }));
-    if (settings.soundUrl) {
-      const audio = new Audio(settings.soundUrl);
-      audio.play().catch(() => undefined);
-    }
     window.setTimeout(() => setTestVisible(false), settings.durationSeconds * 1000);
   }
 
@@ -140,18 +149,20 @@ export default function OverlaySettingsPage() {
         <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_.8fr]">
           <form onSubmit={submit} className="card grid gap-4 p-5">
             <label>Overlay URL<input className="input mt-2" readOnly value={overlayUrl} /></label>
-            <label>Streamer key<input className="input mt-2" name="streamerKey" value={settings.streamerKey} onChange={(event) => setSettings({ ...settings, streamerKey: event.target.value })} required /></label>
-            <label>Alert theme<select className="input mt-2" name="theme" value={settings.theme} onChange={(event) => setSettings({ ...settings, theme: event.target.value as OverlaySettings["theme"] })}><option>Neon Glow</option><option>Anime Bounce</option><option>Minimal Slide</option></select></label>
+            <p className="text-sm text-white/55">URL นี้สุ่มเฉพาะ Account ของคุณและไม่ซ้ำกับคนอื่น</p>
+            <label>Alert Animation<select className="input mt-2" name="theme" value={settings.theme} onChange={(event) => setSettings({ ...settings, theme: event.target.value as OverlaySettings["theme"] })}><option>Neon Glow</option><option>Anime Bounce</option><option>Minimal Slide</option></select></label>
             <label>ตำแหน่ง<select className="input mt-2" name="position" value={settings.position} onChange={(event) => setSettings({ ...settings, position: event.target.value as OverlaySettings["position"] })}><option>Center</option><option>Top</option><option>Bottom</option></select></label>
             <label>ระยะเวลาแสดงผล Overlay (วินาที)<input className="input mt-2" name="durationSeconds" type="number" min="3" max="30" value={settings.durationSeconds} onChange={(event) => setSettings({ ...settings, durationSeconds: Number(event.target.value) })} required /></label>
+            <label>สีข้อความ<input className="input mt-2 h-12" name="textColor" type="color" value={settings.textColor} onChange={(event) => setSettings({ ...settings, textColor: event.target.value })} /></label>
+            <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <div>
               <label className="font-bold">รูปโดเนทสำหรับ Overlay</label>
-              <p className="mt-1 text-sm text-white/60">แนะนำขนาด 512 x 512 px, ไฟล์ PNG/JPG/WebP เพื่อแสดงแทน Icon TH และจะแสดงอยู่บนชื่อผู้โดเนท</p>
+              <p className="mt-1 text-sm text-white/60">แนะนำ 512 x 512 px, PNG/JPG/WebP ใช้แทน Icon TH และแสดงบนชื่อผู้โดเนท</p>
               <input className="input mt-2" name="imageFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onImageChange} />
             </div>
             <div>
               <label className="font-bold">ไฟล์เสียงเมื่อมีคนโดเนท</label>
-              <p className="mt-1 text-sm text-white/60">รองรับ MP3/WAV/OGG แนะนำความยาว 3-10 วินาที</p>
+              <p className="mt-1 text-sm text-white/60">รองรับ MP3/WAV/OGG ระบบจะอ่านข้อความ TTS หลังไฟล์เสียงเล่นจบ</p>
               <input className="input mt-2" name="soundFile" type="file" accept="audio/mpeg,audio/wav,audio/ogg" />
             </div>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>

@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
+import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { LoginDto, RegisterDto } from "./dto";
+import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
 @Injectable()
 export class AuthService {
@@ -83,6 +84,40 @@ export class AuthService {
     };
   }
 
+  async requestPasswordReset(dto: RequestPasswordResetDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (!user) return { ok: true, message: "If this email exists, reset instructions will be created." };
+    const token = randomBytes(24).toString("hex");
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashResetToken(token),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+    return {
+      ok: true,
+      message: "Password reset token created. Connect email delivery before public launch.",
+      resetToken: token,
+    };
+  }
+
+  async confirmPasswordReset(dto: ConfirmPasswordResetDto) {
+    const tokenHash = this.hashResetToken(dto.token);
+    const reset = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException("Invalid or expired reset token");
+    }
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: reset.userId },
+        data: { passwordHash: await argon2.hash(dto.password) },
+      }),
+      this.prisma.passwordResetToken.update({ where: { id: reset.id }, data: { usedAt: new Date() } }),
+    ]);
+    return { ok: true };
+  }
+
   private async signTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
     const [accessToken, refreshToken] = await Promise.all([
@@ -96,5 +131,9 @@ export class AuthService {
       }),
     ]);
     return { accessToken, refreshToken };
+  }
+
+  private hashResetToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
   }
 }

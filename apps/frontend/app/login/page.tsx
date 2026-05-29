@@ -6,10 +6,6 @@ import { Nav } from "@/components/Nav";
 import { api } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 
-function isLocalhost() {
-  return typeof window !== "undefined" && ["127.0.0.1", "localhost"].includes(window.location.hostname);
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -25,13 +21,8 @@ export default function LoginPage() {
         password: form.get("password"),
       });
       saveSession(data.user, data.tokens.accessToken);
-      router.push("/dashboard");
+      router.push(data.user.accountStatus === "APPROVED" ? "/dashboard" : "/settings/profile");
     } catch {
-      if (isLocalhost() && form.get("email") === "creator@tiphouse.test" && form.get("password") === "password123") {
-        saveSession({ id: "local-creator", role: "USER" }, "local-creator-token");
-        router.push("/dashboard");
-        return;
-      }
       setError("เข้าสู่ระบบไม่สำเร็จ");
     }
   }
@@ -42,7 +33,7 @@ export default function LoginPage() {
       window.location.href = data.url;
       return;
     }
-    setStreamlabsMessage("ยังไม่ได้ตั้งค่า Streamlabs OAuth ใน .env");
+    setStreamlabsMessage("ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production");
   }
 
   return (
@@ -56,6 +47,7 @@ export default function LoginPage() {
           <label>Password<input className="input mt-2" name="password" type="password" placeholder="password123" required /></label>
           {error && <p className="text-coral">{error}</p>}
           <button className="btn btn-primary" type="submit">Login</button>
+          <a className="btn text-center" href="/forgot-password">ลืมรหัสผ่าน / Reset Password</a>
           <button className="btn" type="button" onClick={streamlabsLogin}>Login ผ่าน Streamlabs</button>
           {streamlabsMessage && <p className="text-gold">{streamlabsMessage}</p>}
         </form>
