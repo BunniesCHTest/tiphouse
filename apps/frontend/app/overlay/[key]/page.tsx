@@ -93,6 +93,17 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
     const hasThai = /[\u0E00-\u0E7F]/.test(message);
     const hasEnglish = /[A-Za-z]/.test(message);
     const lang = hasThai ? "th-TH" : hasEnglish ? "en-US" : navigator.language || "en-US";
+    const voices = window.speechSynthesis.getVoices();
+    const hasMatchingVoice = voices.some((voice) => {
+      const voiceLang = voice.lang.toLowerCase();
+      const family = lang.split("-")[0].toLowerCase();
+      return voiceLang === lang.toLowerCase() || voiceLang.startsWith(`${family}-`);
+    });
+    if (hasThai && !hasMatchingVoice) {
+      resolve();
+      playThaiAudioFallback(message);
+      return;
+    }
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = lang;
     utterance.pitch = voiceType === "male" ? 0.55 : 1.3;
@@ -113,6 +124,12 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
     window.speechSynthesis.resume();
     window.setTimeout(() => window.speechSynthesis.speak(utterance), 80);
   });
+}
+
+function playThaiAudioFallback(message: string) {
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${encodeURIComponent(message.slice(0, 180))}`;
+  const audio = new Audio(url);
+  audio.play().catch(() => undefined);
 }
 
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
