@@ -19,6 +19,12 @@ type OverlaySettings = {
   ttsVoice: "female" | "male";
 };
 
+type TestAlert = {
+  donorName: string;
+  amount: number;
+  message: string;
+};
+
 const defaultSettings: OverlaySettings = {
   streamerKey: "",
   theme: "Neon Glow",
@@ -28,6 +34,17 @@ const defaultSettings: OverlaySettings = {
   ttsEnabled: true,
   ttsVoice: "female",
 };
+
+const testAlerts: TestAlert[] = [
+  { donorName: "Mint", amount: 50, message: "สู้ๆนะครับ" },
+  { donorName: "Alex", amount: 120, message: "Keep going, your stream is awesome!" },
+  { donorName: "Anonymous", amount: 300, message: "วันนี้สนุกมากครับ" },
+  { donorName: "Nina", amount: 99, message: "Love your content!" },
+];
+
+function randomTestAlert() {
+  return testAlerts[Math.floor(Math.random() * testAlerts.length)];
+}
 
 function readFileAsDataUrl(file: File | null) {
   return new Promise<string | undefined>((resolve, reject) => {
@@ -75,12 +92,12 @@ function overlayPayload(settings: OverlaySettings) {
   };
 }
 
-function AlertPreview({ settings, test }: { settings: OverlaySettings; test: boolean }) {
+function AlertPreview({ settings, test, alert }: { settings: OverlaySettings; test: boolean; alert: TestAlert }) {
   return (
     <div className={`grid w-full max-w-xl place-items-center gap-3 bg-transparent p-5 text-center ${animationClass(settings.theme)}`}>
       {settings.imageUrl && <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 bg-transparent object-contain" />}
-      <h2 className="text-3xl font-black" style={{ color: settings.textColor }}>Anonymous donated ฿100</h2>
-      <p className="text-xl font-bold" style={{ color: settings.textColor }}>สู้ๆนะ</p>
+      <h2 className="text-3xl font-black" style={{ color: settings.textColor }}>{alert.donorName} donated ฿{alert.amount}</h2>
+      <p className="text-xl font-bold" style={{ color: settings.textColor }}>{alert.message}</p>
       {test && <span className="badge">กำลังทดสอบ Overlay</span>}
     </div>
   );
@@ -90,7 +107,9 @@ export default function OverlaySettingsPage() {
   const [saved, setSaved] = useState(false);
   const [testVisible, setTestVisible] = useState(false);
   const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
+  const [previewAlert, setPreviewAlert] = useState<TestAlert>(randomTestAlert);
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
+  const previewUrl = `/overlay/${settings.streamerKey}?preview=1&donor=${encodeURIComponent(previewAlert.donorName)}&amount=${previewAlert.amount}&message=${encodeURIComponent(previewAlert.message)}`;
 
   useEffect(() => {
     const cached = localStorage.getItem(userCacheKey("overlay_settings"));
@@ -138,9 +157,16 @@ export default function OverlaySettingsPage() {
   }
 
   async function testOverlay() {
+    const nextAlert = randomTestAlert();
+    setPreviewAlert(nextAlert);
     setTestVisible(true);
     localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
-    await api.post("/settings/overlay/test", overlayPayload(settings), { headers: authHeaders() }).catch(() => undefined);
+    await api.post("/settings/overlay/test", {
+      ...overlayPayload(settings),
+      testDonorName: nextAlert.donorName,
+      testAmount: String(nextAlert.amount),
+      testMessage: nextAlert.message,
+    }, { headers: authHeaders() }).catch(() => undefined);
     window.setTimeout(() => setTestVisible(false), settings.durationSeconds * 1000);
   }
 
@@ -173,11 +199,11 @@ export default function OverlaySettingsPage() {
             {saved && <p className="text-mint">บันทึก Overlay แล้ว</p>}
             <button className="btn btn-primary" type="submit">บันทึก Overlay</button>
             <button className="btn" type="button" onClick={testOverlay}>ทดสอบ Overlay</button>
-            <Link className="btn" href={`/overlay/${settings.streamerKey}`} target="_blank">เปิด Overlay</Link>
+            <Link className="btn" href={previewUrl} target="_blank">เปิด Overlay</Link>
           </form>
           <div className="card grid place-items-center p-5">
             <div className="relative grid min-h-72 w-full place-items-center rounded-lg border border-white/10 bg-black/20 p-4">
-              <AlertPreview settings={settings} test={testVisible} />
+              <AlertPreview settings={settings} test={testVisible} alert={previewAlert} />
             </div>
           </div>
         </section>

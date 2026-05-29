@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { use, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { api } from "@/lib/api";
 
@@ -116,6 +117,7 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
 
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = use(params);
+  const searchParams = useSearchParams();
   const [alert, setAlert] = useState<AlertPayload | null>(null);
   const [settings, setSettings] = useState<OverlaySettings>({});
   const queueRef = useRef<AlertPayload[]>([]);
@@ -151,7 +153,15 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     document.documentElement.style.background = "transparent";
     document.body.style.overflow = "hidden";
 
-    loadSettings();
+    loadSettings().then(() => {
+      if (searchParams.get("preview") === "1") {
+        enqueueAlert({
+          donorName: searchParams.get("donor") || "Preview",
+          amount: Number(searchParams.get("amount") || 100),
+          message: searchParams.get("message") || "สู้ๆนะครับ",
+        });
+      }
+    });
     const onStorage = (event: StorageEvent) => {
       if (event.key === `tiphouse_overlay_settings:${key}`) {
         const next = readLocalSettings(key);
@@ -171,7 +181,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", loadSettings);
     };
-  }, [key]);
+  }, [key, searchParams]);
 
   useEffect(() => {
     const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://127.0.0.1:4000"}/overlay`);

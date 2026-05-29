@@ -84,9 +84,9 @@ export class SettingsService {
     }
     const overlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
     this.overlay.emitPaidDonation(overlay.streamerKey, {
-      donorName: "Test Overlay",
-      amount: 100,
-      message: "สู้ๆนะครับ",
+      donorName: dto?.testDonorName ?? "Test Overlay",
+      amount: Number(dto?.testAmount ?? 100),
+      message: dto?.testMessage ?? "สู้ๆนะครับ",
       settings: {
         theme: overlay.theme,
         animation: overlay.animation,
@@ -104,3 +104,4 @@ export class SettingsService {
     }
   }
 }
+

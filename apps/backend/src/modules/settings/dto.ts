@@ -38,6 +38,18 @@ export class UpdateOverlayDto {
   @IsString()
   @IsOptional()
   imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  testDonorName?: string;
+
+  @IsString()
+  @IsOptional()
+  testMessage?: string;
+
+  @IsString()
+  @IsOptional()
+  testAmount?: string;
 }
 
 export class UpdateProfileDto {
