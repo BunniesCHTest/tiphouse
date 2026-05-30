@@ -97,7 +97,7 @@ export class SettingsService {
     this.overlay.emitPaidDonation(overlay.streamerKey, {
       donorName: dto?.testDonorName ?? "Test Overlay",
       amount: Number(dto?.testAmount ?? 100),
-      message: dto?.testMessage ?? "สู้ๆนะครับ",
+      message: dto?.testMessage ?? "\u0e2a\u0e39\u0e49\u0e46\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a",
       anonymous: false,
       settings: {
         theme: overlay.theme,

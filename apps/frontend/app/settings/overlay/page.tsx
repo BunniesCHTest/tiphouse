@@ -1,20 +1,21 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
 import { Nav } from "@/components/Nav";
 import { api, authHeaders } from "@/lib/api";
 import { userCacheKey } from "@/lib/session";
 
+type SoundPreset = "none" | "chime" | "pop" | "bell" | "success";
+
 type OverlaySettings = {
   streamerKey: string;
   position: "Center" | "Top" | "Bottom";
   durationSeconds: number;
-  soundUrl?: string;
-  imageUrl?: string;
   ttsEnabled: boolean;
   ttsVoice: "female" | "male";
+  soundPreset: SoundPreset;
   widgetHtml: string;
   widgetCss: string;
   widgetJs: string;
@@ -26,10 +27,42 @@ type TestAlert = {
   message: string;
 };
 
+const THAI_DIGITS = [
+  "\u0e28\u0e39\u0e19\u0e22\u0e4c",
+  "\u0e2b\u0e19\u0e36\u0e48\u0e07",
+  "\u0e2a\u0e2d\u0e07",
+  "\u0e2a\u0e32\u0e21",
+  "\u0e2a\u0e35\u0e48",
+  "\u0e2b\u0e49\u0e32",
+  "\u0e2b\u0e01",
+  "\u0e40\u0e08\u0e47\u0e14",
+  "\u0e41\u0e1b\u0e14",
+  "\u0e40\u0e01\u0e49\u0e32",
+];
+const THAI_UNITS = ["", "\u0e2a\u0e34\u0e1a", "\u0e23\u0e49\u0e2d\u0e22", "\u0e1e\u0e31\u0e19", "\u0e2b\u0e21\u0e37\u0e48\u0e19", "\u0e41\u0e2a\u0e19"];
+const THAI_MILLION = "\u0e25\u0e49\u0e32\u0e19";
+const THAI_YI = "\u0e22\u0e35\u0e48";
+const THAI_ET = "\u0e40\u0e2d\u0e47\u0e14";
+const THAI_BAHT = "\u0e1a\u0e32\u0e17";
+const THAI_ANONYMOUS = "\u0e1a\u0e38\u0e04\u0e04\u0e25\u0e19\u0e34\u0e23\u0e19\u0e32\u0e21";
+const THAI_DONATE = "\u0e42\u0e14\u0e40\u0e19\u0e17";
+const THAI_SAVE_OK = "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01 Overlay \u0e41\u0e25\u0e49\u0e27";
+const THAI_RESET_OK = "\u0e2a\u0e23\u0e49\u0e32\u0e07 Overlay URL \u0e43\u0e2b\u0e21\u0e48\u0e41\u0e25\u0e49\u0e27";
+const THAI_RESET_ERROR = "\u0e23\u0e35\u0e40\u0e0b\u0e47\u0e15 Overlay URL \u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08 \u0e01\u0e23\u0e38\u0e13\u0e32\u0e25\u0e2d\u0e07 Login \u0e43\u0e2b\u0e21\u0e48\u0e2b\u0e23\u0e37\u0e2d\u0e15\u0e23\u0e27\u0e08 backend";
+const THAI_SU_SU = "\u0e2a\u0e39\u0e49\u0e46\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a";
+const THAI_FUN = "\u0e27\u0e31\u0e19\u0e19\u0e35\u0e49\u0e2a\u0e19\u0e38\u0e01\u0e21\u0e32\u0e01\u0e04\u0e23\u0e31\u0e1a";
+
+const soundOptions: Array<{ value: SoundPreset; label: string }> = [
+  { value: "none", label: "\u0e44\u0e21\u0e48\u0e21\u0e35\u0e40\u0e2a\u0e35\u0e22\u0e07" },
+  { value: "chime", label: "Chime" },
+  { value: "pop", label: "Pop" },
+  { value: "bell", label: "Bell" },
+  { value: "success", label: "Success" },
+];
+
 const defaultWidgetHtml = `<div class="tiphouse-alert">
-  <img class="tiphouse-image" src="{{imageUrl}}" alt="" />
   <div class="tiphouse-name">{{donorName}}</div>
-  <div class="tiphouse-amount">โดเนท {{amountBaht}}</div>
+  <div class="tiphouse-amount">\u0e42\u0e14\u0e40\u0e19\u0e17 {{amountBaht}}</div>
   <div class="tiphouse-message">{{message}}</div>
 </div>`;
 
@@ -41,11 +74,6 @@ const defaultWidgetCss = `.tiphouse-alert {
   color: #ffffff;
   font-family: Arial, sans-serif;
   text-shadow: 0 0 18px rgba(56, 226, 194, .85);
-}
-.tiphouse-image {
-  width: 112px;
-  height: 112px;
-  object-fit: contain;
 }
 .tiphouse-name {
   font-size: 44px;
@@ -75,15 +103,16 @@ const defaultSettings: OverlaySettings = {
   durationSeconds: 7,
   ttsEnabled: true,
   ttsVoice: "female",
+  soundPreset: "chime",
   widgetHtml: defaultWidgetHtml,
   widgetCss: defaultWidgetCss,
   widgetJs: defaultWidgetJs,
 };
 
 const testAlerts: TestAlert[] = [
-  { donorName: "Mint", amount: 50, message: "สู้ๆนะครับ" },
+  { donorName: "Mint", amount: 50, message: THAI_SU_SU },
   { donorName: "Alex", amount: 120, message: "Keep going, your stream is awesome!" },
-  { donorName: "Anonymous", amount: 300, message: "วันนี้สนุกมากครับ" },
+  { donorName: "Anonymous", amount: 300, message: THAI_FUN },
   { donorName: "Nina", amount: 99, message: "Love your content!" },
 ];
 
@@ -91,73 +120,59 @@ function randomTestAlert() {
   return testAlerts[Math.floor(Math.random() * testAlerts.length)];
 }
 
-function readFileAsDataUrl(file: File | null) {
-  return new Promise<string | undefined>((resolve, reject) => {
-    if (!file) return resolve(undefined);
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function thaiNumber(value: number): string {
-  const digits = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
-  const units = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
   const number = Math.floor(Math.abs(value));
-  if (number === 0) return digits[0];
+  if (number === 0) return THAI_DIGITS[0];
   if (number >= 1000000) {
     const million = Math.floor(number / 1000000);
     const rest = number % 1000000;
-    return `${thaiNumber(million)}ล้าน${rest ? thaiNumber(rest) : ""}`;
+    return `${thaiNumber(million)}${THAI_MILLION}${rest ? thaiNumber(rest) : ""}`;
   }
   const chars = String(number).split("").map(Number);
   return chars.map((digit, index) => {
     if (digit === 0) return "";
     const place = chars.length - index - 1;
-    if (place === 1 && digit === 1) return units[place];
-    if (place === 1 && digit === 2) return `ยี่${units[place]}`;
-    if (place === 0 && digit === 1 && chars.length > 1) return "เอ็ด";
-    return `${digits[digit]}${units[place]}`;
+    if (place === 1 && digit === 1) return THAI_UNITS[place];
+    if (place === 1 && digit === 2) return `${THAI_YI}${THAI_UNITS[place]}`;
+    if (place === 0 && digit === 1 && chars.length > 1) return THAI_ET;
+    return `${THAI_DIGITS[digit]}${THAI_UNITS[place]}`;
   }).join("");
 }
 
-function normalizeOverlay(data: any): OverlaySettings {
+function normalizeOverlay(data: any, fallback: OverlaySettings = defaultSettings): OverlaySettings {
   return {
-    ...defaultSettings,
-    streamerKey: data?.streamerKey ?? defaultSettings.streamerKey,
-    position: data?.animation?.position ?? defaultSettings.position,
-    durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? defaultSettings.durationSeconds,
-    soundUrl: data?.soundUrl,
-    imageUrl: data?.theme?.imageUrl ?? data?.imageUrl,
-    ttsEnabled: data?.ttsEnabled ?? true,
-    ttsVoice: data?.theme?.ttsVoice ?? defaultSettings.ttsVoice,
-    widgetHtml: data?.theme?.widgetHtml ?? defaultSettings.widgetHtml,
-    widgetCss: data?.theme?.widgetCss ?? defaultSettings.widgetCss,
-    widgetJs: data?.theme?.widgetJs ?? defaultSettings.widgetJs,
+    ...fallback,
+    streamerKey: data?.streamerKey ?? fallback.streamerKey,
+    position: data?.animation?.position ?? fallback.position,
+    durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? fallback.durationSeconds,
+    ttsEnabled: data?.ttsEnabled ?? fallback.ttsEnabled,
+    ttsVoice: data?.theme?.ttsVoice ?? fallback.ttsVoice,
+    soundPreset: data?.theme?.soundPreset ?? fallback.soundPreset,
+    widgetHtml: data?.theme?.widgetHtml ?? fallback.widgetHtml,
+    widgetCss: data?.theme?.widgetCss ?? fallback.widgetCss,
+    widgetJs: data?.theme?.widgetJs ?? fallback.widgetJs,
   };
 }
 
-function fillTemplate(value: string, settings: OverlaySettings, alert: TestAlert) {
-  const donorName = alert.donorName === "Anonymous" ? "บุคคลนิรนาม" : alert.donorName;
+function fillTemplate(value: string, alert: TestAlert) {
+  const donorName = alert.donorName === "Anonymous" ? THAI_ANONYMOUS : alert.donorName;
   const replacements: Record<string, string> = {
     donorName,
     amount: String(alert.amount),
-    amountBaht: `${thaiNumber(alert.amount)}บาท`,
+    amountBaht: `${thaiNumber(alert.amount)}${THAI_BAHT}`,
     message: alert.message,
-    imageUrl: settings.imageUrl ?? "",
   };
   return Object.entries(replacements).reduce((result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement), value);
 }
 
 function overlayPayload(settings: OverlaySettings) {
   return {
+    soundUrl: undefined,
     streamerKey: settings.streamerKey,
-    soundUrl: settings.soundUrl,
     ttsEnabled: settings.ttsEnabled,
     theme: {
-      imageUrl: settings.imageUrl,
       ttsVoice: settings.ttsVoice,
+      soundPreset: settings.soundPreset,
       widgetHtml: settings.widgetHtml,
       widgetCss: settings.widgetCss,
       widgetJs: settings.widgetJs,
@@ -167,11 +182,12 @@ function overlayPayload(settings: OverlaySettings) {
 }
 
 function previewDoc(settings: OverlaySettings, alert: TestAlert) {
-  return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, settings, alert)}</style></head><body>${fillTemplate(settings.widgetHtml, settings, alert)}<script>${fillTemplate(settings.widgetJs, settings, alert)}</script></body></html>`;
+  return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(settings.widgetHtml, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
 }
 
 export default function OverlaySettingsPage() {
-  const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
   const [previewAlert, setPreviewAlert] = useState<TestAlert>(randomTestAlert);
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
@@ -192,45 +208,30 @@ export default function OverlaySettingsPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const nextSettings = await settingsFromForm(form);
-    await api.patch("/settings/overlay", overlayPayload(nextSettings), { headers: authHeaders() });
-    setSettings(nextSettings);
-    localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(nextSettings));
-    localStorage.setItem(`tiphouse_overlay_settings:${nextSettings.streamerKey}`, JSON.stringify(nextSettings));
-    setSaved(true);
-  }
-
-  async function settingsFromForm(form: FormData): Promise<OverlaySettings> {
-    const soundFile = form.get("soundFile") instanceof File ? (form.get("soundFile") as File) : null;
-    const imageFile = form.get("imageFile") instanceof File ? (form.get("imageFile") as File) : null;
-    return {
-      ...settings,
-      position: String(form.get("position") || "Center") as OverlaySettings["position"],
-      durationSeconds: Math.max(3, Math.min(30, Number(form.get("durationSeconds") || 7))),
-      soundUrl: (await readFileAsDataUrl(soundFile && soundFile.size ? soundFile : null)) ?? settings.soundUrl,
-      imageUrl: (await readFileAsDataUrl(imageFile && imageFile.size ? imageFile : null)) ?? settings.imageUrl,
-      ttsEnabled: form.get("ttsEnabled") === "on",
-      ttsVoice: String(form.get("ttsVoice") || "female") as OverlaySettings["ttsVoice"],
-      widgetHtml: String(form.get("widgetHtml") || ""),
-      widgetCss: String(form.get("widgetCss") || ""),
-      widgetJs: String(form.get("widgetJs") || ""),
-    };
-  }
-
-  function onImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setSettings((current) => ({ ...current, imageUrl: URL.createObjectURL(file) }));
+    setError("");
+    await api.patch("/settings/overlay", overlayPayload(settings), { headers: authHeaders() });
+    localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(settings));
+    localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
+    setNotice(THAI_SAVE_OK);
   }
 
   async function resetOverlayUrl() {
-    const { data } = await api.post("/settings/overlay/reset-url", {}, { headers: authHeaders() });
-    const next = normalizeOverlay(data);
-    setSettings(next);
-    localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
-    localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
-    setSaved(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data } = await api.post("/settings/overlay/reset-url", {}, { headers: authHeaders() });
+      const next = normalizeOverlay(data, settings);
+      if (!next.streamerKey || next.streamerKey === settings.streamerKey) {
+        throw new Error("Overlay token did not change");
+      }
+      setSettings(next);
+      localStorage.removeItem(`tiphouse_overlay_settings:${settings.streamerKey}`);
+      localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
+      localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
+      setNotice(THAI_RESET_OK);
+    } catch {
+      setError(THAI_RESET_ERROR);
+    }
   }
 
   async function testOverlay() {
@@ -258,22 +259,14 @@ export default function OverlaySettingsPage() {
             <p className="text-sm text-white/55">URL นี้สุ่มเฉพาะ Account ของคุณและระบบตรวจไม่ให้ซ้ำกับ User คนอื่น</p>
             <label>ตำแหน่ง<select className="input mt-2" name="position" value={settings.position} onChange={(event) => setSettings({ ...settings, position: event.target.value as OverlaySettings["position"] })}><option>Center</option><option>Top</option><option>Bottom</option></select></label>
             <label>ระยะเวลาแสดงผล Overlay (วินาที)<input className="input mt-2" name="durationSeconds" type="number" min="3" max="30" value={settings.durationSeconds} onChange={(event) => setSettings({ ...settings, durationSeconds: Number(event.target.value) })} required /></label>
+            <label>เสียงแจ้งเตือน<select className="input mt-2" name="soundPreset" value={settings.soundPreset} onChange={(event) => setSettings({ ...settings, soundPreset: event.target.value as SoundPreset })}>{soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
-            <div>
-              <label className="font-bold">รูปโดเนทสำหรับ Overlay</label>
-              <p className="mt-1 text-sm text-white/60">แนะนำ 512 x 512 px, PNG/JPG/WebP ใช้กับตัวแปร {"{{imageUrl}}"}</p>
-              <input className="input mt-2" name="imageFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onImageChange} />
-            </div>
-            <div>
-              <label className="font-bold">ไฟล์เสียงเมื่อมีคนโดเนท</label>
-              <p className="mt-1 text-sm text-white/60">รองรับ MP3/WAV/OGG ระบบจะอ่าน TTS หลังไฟล์เสียงเล่นจบ</p>
-              <input className="input mt-2" name="soundFile" type="file" accept="audio/mpeg,audio/wav,audio/ogg" />
-            </div>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
             <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" name="widgetHtml" value={settings.widgetHtml} onChange={(event) => setSettings({ ...settings, widgetHtml: event.target.value })} /></label>
             <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" name="widgetCss" value={settings.widgetCss} onChange={(event) => setSettings({ ...settings, widgetCss: event.target.value })} /></label>
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" name="widgetJs" value={settings.widgetJs} onChange={(event) => setSettings({ ...settings, widgetJs: event.target.value })} /></label>
-            {saved && <p className="text-mint">บันทึก Overlay แล้ว</p>}
+            {notice && <p className="text-mint">{notice}</p>}
+            {error && <p className="text-coral">{error}</p>}
             <button className="btn btn-primary" type="submit">บันทึก Overlay</button>
             <button className="btn" type="button" onClick={testOverlay}>ทดสอบ Overlay</button>
             <Link className="btn" href={previewUrl} target="_blank">เปิด Overlay</Link>

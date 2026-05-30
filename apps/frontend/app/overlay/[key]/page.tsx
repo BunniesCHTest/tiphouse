@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { api } from "@/lib/api";
 
+type SoundPreset = "none" | "chime" | "pop" | "bell" | "success";
+
 type AlertPayload = {
   donorName: string;
   amount: number;
@@ -15,39 +17,51 @@ type AlertPayload = {
 };
 
 type OverlaySettings = {
-  theme?: "Neon Glow" | "Anime Bounce" | "Minimal Slide";
   position?: "Center" | "Top" | "Bottom";
   durationSeconds?: number;
   soundUrl?: string;
-  imageUrl?: string;
-  textColor?: string;
   ttsEnabled?: boolean;
   ttsVoice?: "female" | "male";
+  soundPreset?: SoundPreset;
   widgetHtml?: string;
   widgetCss?: string;
   widgetJs?: string;
 };
 
+const THAI_DIGITS = [
+  "\u0e28\u0e39\u0e19\u0e22\u0e4c",
+  "\u0e2b\u0e19\u0e36\u0e48\u0e07",
+  "\u0e2a\u0e2d\u0e07",
+  "\u0e2a\u0e32\u0e21",
+  "\u0e2a\u0e35\u0e48",
+  "\u0e2b\u0e49\u0e32",
+  "\u0e2b\u0e01",
+  "\u0e40\u0e08\u0e47\u0e14",
+  "\u0e41\u0e1b\u0e14",
+  "\u0e40\u0e01\u0e49\u0e32",
+];
+const THAI_UNITS = ["", "\u0e2a\u0e34\u0e1a", "\u0e23\u0e49\u0e2d\u0e22", "\u0e1e\u0e31\u0e19", "\u0e2b\u0e21\u0e37\u0e48\u0e19", "\u0e41\u0e2a\u0e19"];
+const THAI_MILLION = "\u0e25\u0e49\u0e32\u0e19";
+const THAI_YI = "\u0e22\u0e35\u0e48";
+const THAI_ET = "\u0e40\u0e2d\u0e47\u0e14";
+const THAI_BAHT = "\u0e1a\u0e32\u0e17";
+const THAI_ANONYMOUS = "\u0e1a\u0e38\u0e04\u0e04\u0e25\u0e19\u0e34\u0e23\u0e19\u0e32\u0e21";
+const THAI_DONATE = "\u0e42\u0e14\u0e40\u0e19\u0e17";
+const THAI_MESSAGE_PREFIX = "\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21\u0e27\u0e48\u0e32";
+const THAI_PREVIEW_MESSAGE = "\u0e2a\u0e39\u0e49\u0e46\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a";
+
 function normalizeSettings(data: any): OverlaySettings {
   return {
-    theme: data?.theme?.name ?? data?.theme?.theme ?? data?.theme,
     position: data?.animation?.position ?? data?.position,
     durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? data?.durationSeconds,
     soundUrl: data?.soundUrl,
-    imageUrl: data?.theme?.imageUrl ?? data?.imageUrl,
-    textColor: data?.theme?.textColor ?? "#ffffff",
     ttsEnabled: data?.ttsEnabled ?? true,
     ttsVoice: data?.theme?.ttsVoice ?? "female",
+    soundPreset: data?.theme?.soundPreset ?? "chime",
     widgetHtml: data?.theme?.widgetHtml,
     widgetCss: data?.theme?.widgetCss,
     widgetJs: data?.theme?.widgetJs,
   };
-}
-
-function animationClass(theme?: OverlaySettings["theme"]) {
-  if (theme === "Anime Bounce") return "drop-shadow-[0_0_28px_rgba(245,123,193,.7)]";
-  if (theme === "Minimal Slide") return "drop-shadow-[0_8px_22px_rgba(0,0,0,.45)]";
-  return "drop-shadow-[0_0_28px_rgba(56,226,194,.7)]";
 }
 
 function positionClass(position?: OverlaySettings["position"]) {
@@ -66,46 +80,43 @@ function wait(ms: number) {
 }
 
 function thaiNumber(value: number): string {
-  const digits = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
-  const units = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
   const number = Math.floor(Math.abs(value));
-  if (number === 0) return digits[0];
+  if (number === 0) return THAI_DIGITS[0];
   if (number >= 1000000) {
     const million = Math.floor(number / 1000000);
     const rest = number % 1000000;
-    return `${thaiNumber(million)}ล้าน${rest ? thaiNumber(rest) : ""}`;
+    return `${thaiNumber(million)}${THAI_MILLION}${rest ? thaiNumber(rest) : ""}`;
   }
-
   const chars = String(number).split("").map(Number);
   return chars.map((digit, index) => {
     if (digit === 0) return "";
     const place = chars.length - index - 1;
-    if (place === 1 && digit === 1) return units[place];
-    if (place === 1 && digit === 2) return `ยี่${units[place]}`;
-    if (place === 0 && digit === 1 && chars.length > 1) return "เอ็ด";
-    return `${digits[digit]}${units[place]}`;
+    if (place === 1 && digit === 1) return THAI_UNITS[place];
+    if (place === 1 && digit === 2) return `${THAI_YI}${THAI_UNITS[place]}`;
+    if (place === 0 && digit === 1 && chars.length > 1) return THAI_ET;
+    return `${THAI_DIGITS[digit]}${THAI_UNITS[place]}`;
   }).join("");
 }
 
 function thaiBaht(amount: number) {
-  return `${thaiNumber(Number.isFinite(amount) ? amount : 0)}บาท`;
+  return `${thaiNumber(Number.isFinite(amount) ? amount : 0)}${THAI_BAHT}`;
+}
+
+function donorNameFor(payload: AlertPayload) {
+  return payload.anonymous || payload.donorName === "Anonymous" ? THAI_ANONYMOUS : payload.donorName;
 }
 
 function donationSpeechText(payload: AlertPayload) {
-  const donorName = payload.anonymous || payload.donorName === "Anonymous" ? "บุคคลนิรนาม" : payload.donorName;
-  return `${donorName} โดเนท ${thaiBaht(payload.amount)} ข้อความว่า ${payload.message}`;
+  return `${donorNameFor(payload)} ${THAI_DONATE} ${thaiBaht(payload.amount)} ${THAI_MESSAGE_PREFIX} ${payload.message}`;
 }
 
-function fillTemplate(value: string | undefined, payload: AlertPayload, settings: OverlaySettings) {
+function fillTemplate(value: string | undefined, payload: AlertPayload) {
   if (!value) return "";
-  const donorName = payload.anonymous || payload.donorName === "Anonymous" ? "บุคคลนิรนาม" : payload.donorName;
   const replacements: Record<string, string> = {
-    donorName,
+    donorName: donorNameFor(payload),
     amount: String(payload.amount),
     amountBaht: thaiBaht(payload.amount),
     message: payload.message,
-    imageUrl: settings.imageUrl ?? "",
-    textColor: settings.textColor ?? "#ffffff",
   };
   return Object.entries(replacements).reduce(
     (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
@@ -127,13 +138,9 @@ async function ensureVoicesLoaded() {
 
 function chooseVoice(lang: string, voiceType: "female" | "male") {
   const voices = window.speechSynthesis.getVoices();
-  const languageFamily = lang.split("-")[0].toLowerCase();
-  const sameLang = voices.filter((voice) => {
-    const voiceLang = voice.lang.toLowerCase();
-    return voiceLang === lang.toLowerCase() || voiceLang.startsWith(`${languageFamily}-`);
-  });
-  const malePattern = /male|man|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex|ชาย/i;
-  const femalePattern = /female|woman|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna|หญิง/i;
+  const sameLang = voices.filter((voice) => voice.lang.toLowerCase().startsWith(lang.split("-")[0].toLowerCase()));
+  const malePattern = /male|man|narong|kitt|daniel|david|mark|george|arthur|guy|paul|alex/i;
+  const femalePattern = /female|woman|siri|kanya|google|zira|susan|samantha|victoria|karen|moira|joanna/i;
   const pattern = voiceType === "male" ? malePattern : femalePattern;
   return sameLang.find((voice) => pattern.test(voice.name))
     ?? voices.find((voice) => pattern.test(voice.name))
@@ -143,23 +150,19 @@ function chooseVoice(lang: string, voiceType: "female" | "male") {
 
 async function speakDonationMessage(message: string, voiceType: "female" | "male") {
   if (!message.trim()) return;
-
-  // OBS Browser Source is inconsistent with Thai speechSynthesis voices, so Thai always uses backend audio.
   if (/[\u0E00-\u0E7F]/.test(message)) {
-    await playThaiAudioFallback(message);
+    await playGoogleThaiTts(message);
     return;
   }
-
   if (!("speechSynthesis" in window)) return;
   await ensureVoicesLoaded();
   await new Promise<void>((resolve) => {
-    const lang = /[A-Za-z]/.test(message) ? "en-US" : navigator.language || "en-US";
     const utterance = new SpeechSynthesisUtterance(message);
-    utterance.lang = lang;
+    utterance.lang = "en-US";
     utterance.pitch = voiceType === "male" ? 0.55 : 1.3;
     utterance.rate = voiceType === "male" ? 0.9 : 1.03;
     utterance.volume = 1;
-    const voice = chooseVoice(lang, voiceType);
+    const voice = chooseVoice("en-US", voiceType);
     if (voice) utterance.voice = voice;
     const keepAlive = window.setInterval(() => window.speechSynthesis.resume(), 250);
     const done = () => {
@@ -176,13 +179,33 @@ async function speakDonationMessage(message: string, voiceType: "female" | "male
   });
 }
 
-async function playThaiAudioFallback(message: string) {
+async function playGoogleThaiTts(message: string) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api";
-  const text = encodeURIComponent(message.slice(0, 180));
-  const backendUrl = `${apiBase}/overlay/tts/th?text=${text}`;
-  const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${text}`;
-  const played = await playAudioUrl(backendUrl);
-  if (!played) await playAudioUrl(directUrl);
+  const chunks = chunkText(message, 180);
+  for (const chunk of chunks) {
+    const encoded = encodeURIComponent(chunk);
+    const backendUrl = `${apiBase}/overlay/tts/th?text=${encoded}`;
+    const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${encoded}`;
+    const played = await playAudioUrl(backendUrl);
+    if (!played) await playAudioUrl(directUrl);
+  }
+}
+
+function chunkText(text: string, maxLength: number) {
+  const words = text.split(/\s+/);
+  const chunks: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLength && current) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : [text.slice(0, maxLength)];
 }
 
 async function playAudioUrl(url: string) {
@@ -193,6 +216,36 @@ async function playAudioUrl(url: string) {
     audio.onerror = () => resolve(false);
     audio.play().catch(() => resolve(false));
   });
+}
+
+async function playPresetSound(preset: SoundPreset | undefined) {
+  if (!preset || preset === "none") return;
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const patterns: Record<Exclude<SoundPreset, "none">, Array<[number, number]>> = {
+    chime: [[880, 0.12], [1320, 0.18]],
+    pop: [[520, 0.08], [260, 0.12]],
+    bell: [[740, 0.18], [988, 0.24]],
+    success: [[660, 0.1], [880, 0.1], [1175, 0.18]],
+  };
+  let cursor = context.currentTime;
+  for (const [frequency, duration] of patterns[preset]) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, cursor);
+    gain.gain.exponentialRampToValueAtTime(0.22, cursor + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, cursor + duration);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(cursor);
+    oscillator.stop(cursor + duration);
+    cursor += duration + 0.04;
+  }
+  await wait(Math.ceil((cursor - context.currentTime) * 1000));
+  await context.close().catch(() => undefined);
 }
 
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
@@ -239,7 +292,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         enqueueAlert({
           donorName: searchParams.get("donor") || "Preview",
           amount: Number(searchParams.get("amount") || 100),
-          message: searchParams.get("message") || "สู้ๆนะครับ",
+          message: searchParams.get("message") || THAI_PREVIEW_MESSAGE,
         });
       }
     });
@@ -312,19 +365,20 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         audio.onerror = () => resolve();
         audio.play().catch(() => resolve());
       });
+    } else {
+      await playPresetSound(current.soundPreset);
     }
     if (!current.ttsEnabled) return;
     await speakDonationMessage(donationSpeechText(payload), current.ttsVoice ?? "female");
   }
 
-  const textColor = settings.textColor ?? "#ffffff";
-  const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, alert, settings) : "", [alert, settings]);
-  const customCss = useMemo(() => alert ? fillTemplate(settings.widgetCss, alert, settings) : "", [alert, settings]);
+  const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, alert) : "", [alert, settings.widgetHtml]);
+  const customCss = useMemo(() => alert ? fillTemplate(settings.widgetCss, alert) : "", [alert, settings.widgetCss]);
 
   useEffect(() => {
     if (!alert || !settings.widgetJs || !widgetRef.current) return;
     try {
-      const code = fillTemplate(settings.widgetJs, alert, settings);
+      const code = fillTemplate(settings.widgetJs, alert);
       new Function("root", "payload", "settings", code)(widgetRef.current, alert, settings);
     } catch {
       // Custom widget JS should never break the overlay runtime.
@@ -341,20 +395,10 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
             exit={{ opacity: 0, y: -30, scale: 0.95 }}
             className="mx-auto grid max-w-3xl place-items-center gap-3 bg-transparent p-5 text-center"
           >
-            {settings.widgetHtml ? (
-              <div ref={widgetRef} className="tiphouse-widget">
-                <style dangerouslySetInnerHTML={{ __html: customCss }} />
-                <div dangerouslySetInnerHTML={{ __html: customHtml }} />
-              </div>
-            ) : (
-              <>
-                {settings.imageUrl && (
-                  <img alt="Overlay donation image" src={settings.imageUrl} className="size-28 bg-transparent object-contain" />
-                )}
-                <h1 className="text-4xl font-black" style={{ color: textColor }}>{alert.donorName} donated ฿{alert.amount}</h1>
-                <p className="text-2xl font-bold" style={{ color: textColor }}>{alert.message}</p>
-              </>
-            )}
+            <div ref={widgetRef} className="tiphouse-widget">
+              <style dangerouslySetInnerHTML={{ __html: customCss }} />
+              <div dangerouslySetInnerHTML={{ __html: customHtml }} />
+            </div>
           </motion.section>
         )}
       </AnimatePresence>
