@@ -44,8 +44,9 @@ type ApprovalRow = {
 const tabs = [
   ["users", "จัดการ User"],
   ["transactions", "Transaction โดเนท"],
-  ["approvals", "คำขออนุมัติ"],
 ] as const;
+
+type AdminTab = (typeof tabs)[number][0] | "approvals";
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -83,7 +84,7 @@ function downloadExcel(rows: DonationRow[]) {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [active, setActive] = useState<(typeof tabs)[number][0]>("users");
+  const [active, setActive] = useState<AdminTab>("users");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [transactions, setTransactions] = useState<DonationRow[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);

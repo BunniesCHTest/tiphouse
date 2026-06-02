@@ -125,6 +125,7 @@ export class AuthService {
         username: user.username,
         role: user.role,
         accountStatus: user.accountStatus,
+        onboardingRequired: (user as any).onboardingRequired ? "true" : "false",
       }).toString();
       return res.redirect(redirect.toString());
     } catch (error) {
@@ -230,7 +231,7 @@ export class AuthService {
 
     const username = await this.uniqueUsername(usernameBase || `streamlabs-${streamlabsId}`);
     const slug = await this.uniqueSlug(username);
-    return this.prisma.user.create({
+    const created = await this.prisma.user.create({
       data: {
         username,
         email,
@@ -252,6 +253,7 @@ export class AuthService {
         },
       },
     });
+    return { ...created, onboardingRequired: true };
   }
 
   private async connectStreamlabsToUser(userId: string, streamlabsUser: StreamlabsUserResponse, token: StreamlabsTokenResponse) {

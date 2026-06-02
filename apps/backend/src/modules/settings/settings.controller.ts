@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
-import { UpdateProfileDto, UpsertPayoutDto, UpdateOverlayDto } from "./dto";
+import { CompleteCreatorOnboardingDto, UpdateProfileDto, UpsertPayoutDto, UpdateOverlayDto } from "./dto";
 import { SettingsService } from "./settings.service";
 
 @UseGuards(JwtAuthGuard)
@@ -17,6 +17,11 @@ export class SettingsController {
   @Patch("profile")
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
     return this.settings.updateProfile(user.sub, dto);
+  }
+
+  @Post("onboarding")
+  completeOnboarding(@CurrentUser() user: JwtUser, @Body() dto: CompleteCreatorOnboardingDto) {
+    return this.settings.completeOnboarding(user.sub, dto);
   }
 
   @Get("payout")

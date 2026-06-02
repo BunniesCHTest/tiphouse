@@ -1,9 +1,9 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { OverlayService } from "../overlay/overlay.service";
 import { PrismaService } from "../../prisma/prisma.service";
-import { UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
+import { CompleteCreatorOnboardingDto, UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
 
 @Injectable()
 export class SettingsService {
@@ -37,6 +37,52 @@ export class SettingsService {
     if (Object.keys(data).length) {
       await this.prisma.user.update({ where: { id: userId }, data });
     }
+    return this.getProfile(userId);
+  }
+
+  async completeOnboarding(userId: string, dto: CompleteCreatorOnboardingDto) {
+    await this.ensureApproved(userId);
+    const displayName = dto.displayName.trim();
+    const slug = dto.slug.trim().toLowerCase();
+
+    if (!/^[a-z0-9-]{4,20}$/.test(slug)) {
+      throw new BadRequestException("Donation URL must be 4-20 lowercase letters, numbers, or hyphens");
+    }
+
+    const [slugOwner, usernameOwner] = await Promise.all([
+      this.prisma.donationPage.findUnique({ where: { slug }, select: { userId: true } }),
+      this.prisma.user.findUnique({ where: { username: slug }, select: { id: true } }),
+    ]);
+
+    if ((slugOwner && slugOwner.userId !== userId) || (usernameOwner && usernameOwner.id !== userId)) {
+      throw new ConflictException("Donation URL is already used by another creator");
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        username: slug,
+        page: {
+          upsert: {
+            create: {
+              slug,
+              displayName,
+              handle: `@${slug}`,
+              minAmount: 20,
+              goalAmount: 5000,
+              donationAccountName: "TipHouse Donate",
+              theme: {},
+            },
+            update: {
+              slug,
+              displayName,
+              handle: `@${slug}`,
+            },
+          },
+        },
+      },
+    });
+
     return this.getProfile(userId);
   }
 

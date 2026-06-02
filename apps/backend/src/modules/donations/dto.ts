@@ -1,5 +1,5 @@
 import { PaymentProvider } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from "class-validator";
 
 export class CreateDonationDto {
   @IsString()
@@ -63,4 +63,8 @@ export class UpdateDonationPageDto {
   @Min(100)
   @IsOptional()
   goalAmount?: number;
+
+  @IsObject()
+  @IsOptional()
+  theme?: Record<string, unknown>;
 }

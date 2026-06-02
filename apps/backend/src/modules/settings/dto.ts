@@ -1,4 +1,4 @@
-import { IsBoolean, IsObject, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsObject, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class UpsertPayoutDto {
   @IsString()
@@ -60,4 +60,15 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   email?: string;
+}
+
+export class CompleteCreatorOnboardingDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  displayName!: string;
+
+  @IsString()
+  @Matches(/^[a-z0-9-]{4,20}$/)
+  slug!: string;
 }

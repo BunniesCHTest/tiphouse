@@ -4,9 +4,11 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Nav } from "@/components/Nav";
 import { api } from "@/lib/api";
+import { useAppPreferences } from "@/lib/app-preferences";
 
 function LoginContent() {
   const searchParams = useSearchParams();
+  const { t } = useAppPreferences();
   const [streamlabsMessage, setStreamlabsMessage] = useState("");
 
   useEffect(() => {
@@ -40,11 +42,11 @@ function LoginContent() {
     <>
       <Nav publicOnly />
       <main className="mx-auto w-[min(760px,calc(100%-2rem))] py-10">
-        <p className="font-bold text-mint">Creator Login</p>
-        <h1 className="mt-3 text-5xl font-black">เข้าสู่ระบบด้วย Streamlabs</h1>
+        <p className="font-bold text-mint">{t("เข้าสู่ระบบ Creator", "Creator Login")}</p>
+        <h1 className="mt-3 text-5xl font-black">{t("เข้าสู่ระบบด้วย Streamlabs", "Sign in with Streamlabs")}</h1>
         <section className="card mt-8 grid gap-4 p-5">
-          <p className="leading-7 text-white/65">TipHouse ใช้ Streamlabs Login สำหรับ Creator เท่านั้น เพื่อเชื่อม Alert Box, Tips และ Variation จากบัญชี Streamlabs ของคุณ</p>
-          <button className="btn btn-primary" type="button" onClick={streamlabsLogin}>Login ผ่าน Streamlabs</button>
+          <p className="leading-7 text-white/65">{t("TipHouse ใช้ Streamlabs Login สำหรับ Creator เท่านั้น เพื่อเชื่อม Alert Box, Tips และ Variation จากบัญชี Streamlabs ของคุณ", "TipHouse uses Streamlabs Login for creators, connecting your Alert Box, Tips, and variations from your Streamlabs account.")}</p>
+          <button className="btn btn-primary" type="button" onClick={streamlabsLogin}>{t("Login ผ่าน Streamlabs", "Login with Streamlabs")}</button>
           {streamlabsMessage && <p className="text-gold">{streamlabsMessage}</p>}
         </section>
       </main>

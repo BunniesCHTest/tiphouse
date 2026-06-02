@@ -1,16 +1,20 @@
+"use client";
+
 import Link from "next/link";
 import { Nav } from "@/components/Nav";
-
-const features = [
-  { title: "PromptPay QR", text: "สร้าง QR หลังกรอกข้อมูลครบ รองรับยอดขั้นต่ำและชื่อบัญชีโดเนทของ Creator" },
-  { title: "OBS Overlay", text: "ใช้ Browser Source URL สำหรับ Alert แบบ realtime พร้อมคิวแจ้งเตือนและ TTS" },
-  { title: "Streamlabs Tips", text: "Creator เชื่อมบัญชี Streamlabs เพื่อใช้ Alert Box Tips/Variation ที่ตั้งไว้ใน Streamlabs" },
-  { title: "Creator Dashboard", text: "ดูยอดโดเนทล่าสุด รายได้รวม ประวัติรายการ และตั้งค่าหน้าโดเนท" },
-  { title: "Admin Approval", text: "บัญชีใหม่และการเปลี่ยนอีเมลต้องรอ Admin อนุมัติก่อนเปิดใช้งานรับโดเนท" },
-  { title: "Viewer UX", text: "ผู้โดเนทใช้งานได้ง่าย เลือก Anonymous ได้ และดูรายการ/อันดับผู้สนับสนุนล่าสุด" },
-];
+import { useAppPreferences } from "@/lib/app-preferences";
 
 export default function HomePage() {
+  const { t } = useAppPreferences();
+  const features = [
+    { title: "PromptPay QR", text: t("สร้าง QR หลังกรอกข้อมูลครบ รองรับยอดขั้นต่ำและระบบตรวจสอบรายการโดเนท", "Generate QR codes after donors complete the form, with minimum amount validation and donation status checks.") },
+    { title: "OBS Overlay", text: t("ใช้ Browser Source URL สำหรับ Alert แบบ realtime พร้อมคิวแจ้งเตือนและ TTS", "Use a Browser Source URL for realtime alerts with queue handling and TTS.") },
+    { title: "Streamlabs Tips", text: t("Creator เชื่อมบัญชี Streamlabs เพื่อใช้ Alert Box Tips/Variation ที่ตั้งไว้ใน Streamlabs", "Creators can connect Streamlabs and use their existing Tips Alert Box variations.") },
+    { title: "Creator Dashboard", text: t("ดูยอดโดเนทล่าสุด รายได้รวม ประวัติรายการ และตั้งค่าหน้าโดเนท", "Track recent donations, revenue, history, and donation page settings.") },
+    { title: "Viewer UX", text: t("ผู้โดเนทใช้งานง่าย เลือก Anonymous ได้ และดูอันดับผู้สนับสนุนล่าสุด", "Donors get a simple flow with Anonymous mode and supporter rankings.") },
+    { title: "Donate Goal", text: t("ตั้งค่า Donate Goal สำหรับแสดงบน OBS และอัปเดตตามยอดโดเนทจริง", "Configure a Donate Goal widget for OBS that updates from real donations.") },
+  ];
+
   return (
     <>
       <Nav />
@@ -20,11 +24,13 @@ export default function HomePage() {
             <p className="mb-4 font-bold text-mint">Realtime Donate Platform for Streamers</p>
             <h1 className="text-6xl font-extrabold leading-none md:text-8xl">TipHouse</h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75">
-              ระบบรับโดเนท production-ready พร้อม auth, PostgreSQL, payment webhook,
-              realtime OBS overlay, dashboard และ admin audit สำหรับนำขึ้นใช้งานจริง
+              {t(
+                "ระบบรับโดเนท production-ready พร้อม Streamlabs Login, PostgreSQL, payment webhook, realtime OBS overlay, dashboard และ admin audit สำหรับนำขึ้นใช้งานจริง",
+                "A production-ready donation platform with Streamlabs Login, PostgreSQL, payment webhooks, realtime OBS overlays, dashboards, and admin audit tools.",
+              )}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="btn btn-primary" href="/login">เริ่มต้นใช้งานด้วย Streamlabs</Link>
+              <Link className="btn btn-primary" href="/login">{t("เริ่มต้นใช้งานด้วย Streamlabs", "Get Started with Streamlabs")}</Link>
             </div>
           </div>
           <section className="card overflow-hidden">
@@ -32,13 +38,13 @@ export default function HomePage() {
               <div className="flex min-h-64 items-end justify-between gap-4">
                 <div>
                   <div className="grid size-20 place-items-center rounded-2xl border-2 border-white/70 bg-mint text-2xl font-black text-ink">TH</div>
-                  <h2 className="mt-4 text-3xl font-black">TipHouse</h2>
+                  <h2 className="mt-4 text-3xl font-black text-white">TipHouse</h2>
                   <p className="text-white/65">@tiphouse</p>
                 </div>
               </div>
             </div>
             <div className="grid gap-3 p-5 text-white/65">
-              <p>เชื่อมต่อ Streamlabs เพื่อเริ่มจัดการหน้าโดเนท, Overlay และ Donate Goal สำหรับ OBS ได้ในที่เดียว</p>
+              <p>{t("เชื่อมต่อ Streamlabs เพื่อเริ่มจัดการหน้าโดเนท, Overlay และ Donate Goal สำหรับ OBS ได้ในที่เดียว", "Connect Streamlabs to manage your donation page, overlay, and Donate Goal for OBS in one place.")}</p>
             </div>
           </section>
         </section>

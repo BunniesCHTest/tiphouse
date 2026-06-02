@@ -14,6 +14,8 @@ export default function StreamlabsCallbackPage() {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const accessToken = params.get("accessToken");
     const id = params.get("id");
+    const username = params.get("username") ?? "";
+    const onboardingRequired = params.get("onboardingRequired") === "true";
     const role = params.get("role") ?? "USER";
     const accountStatus = params.get("accountStatus") ?? "APPROVED";
 
@@ -30,7 +32,8 @@ export default function StreamlabsCallbackPage() {
     window.open(STREAMLABS_DASHBOARD_URL, "_blank", "noopener,noreferrer");
     setMessage("เชื่อมต่อสำเร็จ กำลังพาไป Dashboard ของ TipHouse...");
     window.setTimeout(() => {
-      router.replace(accountStatus === "APPROVED" ? "/dashboard?streamlabs=connected" : "/settings/profile");
+      const needsOnboarding = onboardingRequired || username.startsWith("streamlabs-");
+      router.replace(needsOnboarding ? "/onboarding" : accountStatus === "APPROVED" ? "/dashboard?streamlabs=connected" : "/settings/profile");
     }, 800);
   }, [router]);
 

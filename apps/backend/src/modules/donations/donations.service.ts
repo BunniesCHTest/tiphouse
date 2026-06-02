@@ -1,5 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { DonationStatus } from "@prisma/client";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { DonationStatus, Prisma } from "@prisma/client";
 import QRCode from "qrcode";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateDonationDto, UpdateDonationPageDto } from "./dto";
@@ -149,10 +149,24 @@ export class DonationsService {
     return { page, donations, revenue: totals._sum.amount ?? 0, donationCount: totals._count };
   }
 
-  updatePage(userId: string, dto: UpdateDonationPageDto) {
-    return this.ensureApproved(userId).then(() =>
-      this.prisma.donationPage.update({ where: { userId }, data: dto }),
-    );
+  async updatePage(userId: string, dto: UpdateDonationPageDto) {
+    await this.ensureApproved(userId);
+    if (dto.slug) {
+      const slug = dto.slug.trim().toLowerCase();
+      if (!/^[a-z0-9-]{4,20}$/.test(slug)) {
+        throw new BadRequestException("Donation URL must be 4-20 lowercase letters, numbers, or hyphens");
+      }
+      const existing = await this.prisma.donationPage.findUnique({ where: { slug }, select: { userId: true } });
+      if (existing && existing.userId !== userId) {
+        throw new ConflictException("Donation URL is already used by another creator");
+      }
+      dto.slug = slug;
+    }
+    const data: Prisma.DonationPageUpdateInput = {
+      ...dto,
+      theme: dto.theme as Prisma.InputJsonValue | undefined,
+    };
+    return this.prisma.donationPage.update({ where: { userId }, data });
   }
 
   private async ensureApproved(userId: string) {

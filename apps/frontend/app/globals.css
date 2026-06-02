@@ -85,6 +85,16 @@ body {
   outline: none;
 }
 
+select.input {
+  min-width: 8.5rem;
+  color: var(--app-text);
+}
+
+select.input option {
+  background: #071522;
+  color: #f4fbff;
+}
+
 .badge {
   display: inline-flex;
   border-radius: 999px;
@@ -154,6 +164,29 @@ body {
 :root[data-theme="light"] .text-white\/45,
 :root[data-theme="light"] .text-white\/40 {
   color: var(--app-muted);
+}
+
+:root[data-theme="light"] .text-white,
+:root[data-theme="light"] .text-white\/75 {
+  color: var(--app-text);
+}
+
+:root[data-theme="light"] .input {
+  background: #ffffff;
+  color: var(--app-text);
+}
+
+:root[data-theme="light"] select.input option {
+  background: #ffffff;
+  color: #061724;
+}
+
+:root[data-theme="light"] .bg-white\/5 {
+  background: rgba(6, 23, 36, 0.04);
+}
+
+:root[data-theme="light"] .bg-white\/10 {
+  background: rgba(6, 23, 36, 0.08);
 }
 
 :root[data-theme="light"] .bg-ink\/80 {

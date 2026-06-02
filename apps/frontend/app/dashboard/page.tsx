@@ -103,7 +103,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="text-2xl font-black">{t("สถิติรายได้", "Revenue Analytics")}</h2>
               <div className="flex flex-wrap gap-2 text-sm">
-                <label>{t("View By", "View By")}<select className="input mt-1 h-10 py-1" value={viewBy} onChange={(event) => setViewBy(event.target.value as ViewBy)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label>
+                <label>{t("View By", "View By")}<select className="input mt-1 h-11 min-w-36 py-1" value={viewBy} onChange={(event) => setViewBy(event.target.value as ViewBy)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label>
                 <label>From<input className="input mt-1 h-10 py-1" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
                 <label>To<input className="input mt-1 h-10 py-1" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
               </div>

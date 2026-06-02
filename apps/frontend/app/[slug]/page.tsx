@@ -13,6 +13,10 @@ type PageData = {
   donationAccountName?: string | null;
   minAmount: number;
   goalAmount: number;
+  theme?: {
+    quicklinkUrl?: string;
+    quicklinkText?: string;
+  } | null;
 };
 
 type QrState = {
@@ -50,7 +54,13 @@ const defaultPage: PageData = {
   donationAccountName: "Bunnie SCH Donate",
   minAmount: 20,
   goalAmount: 5000,
+  theme: {},
 };
+
+function externalUrl(value?: string) {
+  if (!value) return "";
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
 
 function triggerOverlay(payload: { donorName: string; amount: number; message: string; anonymous?: boolean }) {
   localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({ ...payload, nonce: Date.now() }));
@@ -202,7 +212,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           </div>
           <div>
             <h1 className="mt-2 text-5xl font-black md:text-7xl">{page.displayName}</h1>
-            <p className="text-white/70">{page.handle}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p className="text-white/70">{page.handle}</p>
+              {page.theme?.quicklinkUrl && (
+                <a className="btn min-h-9 px-3 py-1" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
+                  {page.theme.quicklinkText || page.handle || "Quicklink"}
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </section>

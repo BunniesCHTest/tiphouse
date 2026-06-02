@@ -1,0 +1,118 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AxiosError } from "axios";
+import { AuthGate } from "@/components/AuthGate";
+import { Nav } from "@/components/Nav";
+import { api, authHeaders } from "@/lib/api";
+import { userCacheKey } from "@/lib/session";
+import { useAppPreferences } from "@/lib/app-preferences";
+
+type Profile = {
+  username?: string;
+  page?: {
+    slug?: string;
+    displayName?: string;
+  } | null;
+};
+
+const slugPattern = /^[a-z0-9-]{4,20}$/;
+
+function normalizeSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20);
+}
+
+function apiMessage(error: unknown) {
+  if (error instanceof AxiosError) {
+    const message = error.response?.data?.message;
+    if (Array.isArray(message)) return message.join(", ");
+    if (typeof message === "string") return message;
+  }
+  return "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+}
+
+export default function CreatorOnboardingPage() {
+  const router = useRouter();
+  const { t } = useAppPreferences();
+  const [displayName, setDisplayName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get<Profile>("/settings/profile", { headers: authHeaders() }).then((res) => {
+      const page = res.data.page;
+      setDisplayName(page?.displayName ?? res.data.username ?? "");
+      const currentSlug = page?.slug ?? res.data.username ?? "";
+      setSlug(currentSlug.startsWith("streamlabs-") ? "" : normalizeSlug(currentSlug));
+    }).catch(() => undefined);
+  }, []);
+
+  const donationUrl = useMemo(() => {
+    if (typeof window === "undefined") return `/${slug || "your-url"}`;
+    return `${window.location.origin}/${slug || "your-url"}`;
+  }, [slug]);
+  const slugValid = slugPattern.test(slug);
+  const canSubmit = displayName.trim().length >= 2 && slugValid;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit) return;
+    setSaving(true);
+    setError("");
+    try {
+      const { data } = await api.post("/settings/onboarding", {
+        displayName: displayName.trim(),
+        slug,
+      }, { headers: authHeaders() });
+      const page = data?.page ?? { slug, displayName, handle: `@${slug}` };
+      localStorage.setItem(userCacheKey("donation_slug"), page.slug);
+      localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));
+      window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: page }));
+      router.replace("/settings/donation-page?setup=done");
+    } catch (caught) {
+      setError(apiMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <AuthGate>
+      <Nav />
+      <main className="mx-auto w-[min(760px,calc(100%-2rem))] py-10">
+        <p className="font-bold text-mint">{t("ตั้งค่า Creator ครั้งแรก", "Creator Setup")}</p>
+        <h1 className="mt-3 text-5xl font-black">{t("ตั้งค่าหน้าโดเนทของคุณ", "Set Up Your Donation Page")}</h1>
+        <p className="mt-4 leading-7 text-white/65">
+          {t("หลัง Login ด้วย Streamlabs ครั้งแรก กรุณาตั้งชื่อและ URL หน้าโดเนทก่อนเริ่มใช้งานระบบ", "After your first Streamlabs login, set your creator name and donation URL before using TipHouse.")}
+        </p>
+        <form onSubmit={submit} className="card mt-8 grid gap-5 p-5">
+          <label>
+            {t("ชื่อครีเอเตอร์", "Creator Name")}
+            <input className="input mt-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
+          </label>
+          <label>
+            {t("Username URL หน้าโดเนท", "Donation Page Username URL")}
+            <input
+              className={`input mt-2 ${slug && !slugValid ? "border-coral text-coral" : ""}`}
+              value={slug}
+              onChange={(event) => setSlug(normalizeSlug(event.target.value))}
+              placeholder="bunniesch"
+              required
+            />
+            <span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร พิมพ์เล็ก ตัวเลข และขีดกลางเท่านั้น</span>
+          </label>
+          <label>
+            {t("URL หน้าโดเนท", "Donation Page URL")}
+            <input className="input mt-2" value={donationUrl} readOnly />
+          </label>
+          {error && <p className="font-bold text-coral">{error}</p>}
+          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canSubmit || saving}>
+            {saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกและเริ่มใช้งาน", "Save and Continue")}
+          </button>
+        </form>
+      </main>
+    </AuthGate>
+  );
+}
