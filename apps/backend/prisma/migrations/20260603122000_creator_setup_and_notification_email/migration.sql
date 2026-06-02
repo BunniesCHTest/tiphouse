@@ -1,0 +1,4 @@
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "creatorSetupCompleted" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "donationNotificationEmail" TEXT;
+
+ALTER TABLE "PayoutAccount" ALTER COLUMN "promptpayId" DROP NOT NULL;

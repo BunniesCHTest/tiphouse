@@ -16,6 +16,7 @@ export default function StreamlabsCallbackPage() {
     const id = params.get("id");
     const username = params.get("username") ?? "";
     const onboardingRequired = params.get("onboardingRequired") === "true";
+    const creatorSetupCompleted = params.get("creatorSetupCompleted") === "true";
     const role = params.get("role") ?? "USER";
     const accountStatus = params.get("accountStatus") ?? "APPROVED";
 
@@ -25,14 +26,14 @@ export default function StreamlabsCallbackPage() {
       return;
     }
 
-    saveSession({ id, role, accountStatus }, accessToken);
+    saveSession({ id, role, accountStatus, creatorSetupCompleted }, accessToken);
 
     // Browsers may block this because the OAuth callback is not a direct click,
     // so the page also shows a manual link below while redirecting to TipHouse.
     window.open(STREAMLABS_DASHBOARD_URL, "_blank", "noopener,noreferrer");
     setMessage("เชื่อมต่อสำเร็จ กำลังพาไป Dashboard ของ TipHouse...");
     window.setTimeout(() => {
-      const needsOnboarding = onboardingRequired || username.startsWith("streamlabs-");
+      const needsOnboarding = onboardingRequired || !creatorSetupCompleted || username.startsWith("streamlabs-");
       router.replace(needsOnboarding ? "/onboarding" : accountStatus === "APPROVED" ? "/dashboard?streamlabs=connected" : "/settings/profile");
     }, 800);
   }, [router]);

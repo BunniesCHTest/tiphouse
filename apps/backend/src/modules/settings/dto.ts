@@ -1,4 +1,4 @@
-import { IsBoolean, IsObject, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsEmail, IsObject, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class UpsertPayoutDto {
   @IsString()
@@ -47,7 +47,8 @@ export class UpsertPayoutDto {
   promptpayType?: string;
 
   @IsString()
-  promptpayId!: string;
+  @IsOptional()
+  promptpayId?: string;
 
   @IsString()
   @IsOptional()
@@ -111,4 +112,8 @@ export class CompleteCreatorOnboardingDto {
   @IsString()
   @Matches(/^[a-z0-9-]{4,20}$/)
   slug!: string;
+
+  @IsEmail()
+  @IsOptional()
+  donationNotificationEmail?: string;
 }

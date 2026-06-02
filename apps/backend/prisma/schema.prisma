@@ -55,6 +55,8 @@ model User {
   pendingEmail String?
   twoFaSecret  String?
   passwordMustChange Boolean @default(false)
+  creatorSetupCompleted Boolean @default(false)
+  donationNotificationEmail String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   page         DonationPage?
@@ -165,7 +167,7 @@ model PayoutAccount {
   accountNumber String
   payoutMethod  String   @default("BANK_TRANSFER")
   promptpayType String?
-  promptpayId   String
+  promptpayId   String?
   note          String?
   kycStatus     String   @default("PENDING")
   createdAt     DateTime @default(now())

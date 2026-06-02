@@ -12,9 +12,10 @@ type UserRow = {
   email: string;
   role: string;
   accountStatus: string;
+  creatorSetupCompleted?: boolean;
+  donationNotificationEmail?: string | null;
   authProvider?: string;
   streamlabsUsername?: string | null;
-  pendingEmail?: string | null;
   payout?: {
     accountName?: string | null;
     legalName?: string | null;
@@ -27,8 +28,6 @@ type UserRow = {
     accountType?: string | null;
     accountNumber?: string | null;
     payoutMethod?: string | null;
-    promptpayType?: string | null;
-    promptpayId?: string | null;
     kycStatus?: string | null;
   } | null;
   page?: { slug: string; displayName: string; minAmount: number; goalAmount: number } | null;
@@ -75,6 +74,12 @@ function asArray<T>(value: unknown): T[] {
 function isAuthError(error: unknown) {
   const status = (error as { response?: { status?: number } })?.response?.status;
   return status === 401 || status === 403;
+}
+
+function displayUserStatus(user: Pick<UserRow, "accountStatus" | "creatorSetupCompleted">) {
+  if (user.accountStatus === "SUSPENDED") return "SUSPENDED";
+  if (user.accountStatus === "APPROVED" && user.creatorSetupCompleted) return "ACTIVE";
+  return "PENDING";
 }
 
 function downloadExcel(rows: DonationRow[]) {
@@ -213,8 +218,9 @@ export default function AdminPage() {
       {
         username: form.get("username"),
         email: form.get("email"),
+        donationNotificationEmail: form.get("donationNotificationEmail"),
         role: form.get("role"),
-        accountStatus: form.get("accountStatus"),
+        accountStatus: form.get("accountStatus") === "ACTIVE" ? "APPROVED" : form.get("accountStatus"),
         page: {
           slug: form.get("slug"),
           displayName: form.get("displayName"),
@@ -305,15 +311,16 @@ export default function AdminPage() {
           <section className="card mt-5 overflow-auto p-4">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
-                <tr><th>User</th><th>Email</th><th>Login</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th></th></tr>
+                <tr><th>User</th><th>Email</th><th>Email แจ้งเตือนโดเนท</th><th>Login</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id} className="border-t border-white/10">
                     <td className="py-3 font-bold">{user.username}</td>
-                    <td>{user.email}{user.pendingEmail && <span className="block text-gold">รออีเมล: {user.pendingEmail}</span>}</td>
+                    <td>{user.email}</td>
+                    <td>{user.donationNotificationEmail || "-"}</td>
                     <td>{user.authProvider ?? "Email"}{user.streamlabsUsername && <span className="block text-mint">@{user.streamlabsUsername}</span>}</td>
-                    <td>{user.accountStatus}</td>
+                    <td>{displayUserStatus(user)}</td>
                     <td>{user.role}</td>
                     <td>/{user.page?.slug}</td>
                     <td className="flex gap-2 py-2">
@@ -389,8 +396,9 @@ export default function AdminPage() {
                 <form onSubmit={saveUser} className="grid gap-4 md:grid-cols-2">
                   <label>Username<input className="input mt-2" name="username" defaultValue={selectedUser.username} required /></label>
                   <label>Email<input className="input mt-2" name="email" type="email" defaultValue={selectedUser.email} required /></label>
+                  <label>Email แจ้งเตือนโดเนท<input className="input mt-2" name="donationNotificationEmail" type="email" defaultValue={selectedUser.donationNotificationEmail ?? ""} /></label>
                   <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option><option>ACCOUNTING</option></select></label>
-                  <label>Status<select className="input mt-2" name="accountStatus" defaultValue={selectedUser.accountStatus || "PENDING"}><option>PENDING</option><option>APPROVED</option><option>SUSPENDED</option></select></label>
+                  <label>Status<select className="input mt-2" name="accountStatus" defaultValue={displayUserStatus(selectedUser)}><option>ACTIVE</option><option>SUSPENDED</option><option>PENDING</option></select></label>
                   <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
                   <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
                   <label>ยอดขั้นต่ำ<input className="input mt-2" name="minAmount" type="number" defaultValue={selectedUser.page?.minAmount ?? 20} /></label>
@@ -430,8 +438,6 @@ export default function AdminPage() {
                       ["ประเภทบัญชี", selectedUser.payout.accountType],
                       ["เลขบัญชี", selectedUser.payout.accountNumber],
                       ["วิธีโอนจ่าย", selectedUser.payout.payoutMethod],
-                      ["ประเภทพร้อมเพย์", selectedUser.payout.promptpayType],
-                      ["พร้อมเพย์", selectedUser.payout.promptpayId],
                       ["สถานะ KYC", selectedUser.payout.kycStatus],
                       ["ที่อยู่", selectedUser.payout.address],
                     ].map(([label, value]) => (

@@ -19,9 +19,10 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
     const token = localStorage.getItem("tiphouse_access_token");
     const storedRole = localStorage.getItem("tiphouse_role") ?? "";
     const storedStatus = localStorage.getItem("tiphouse_account_status") ?? "";
+    const storedSetupCompleted = localStorage.getItem("tiphouse_creator_setup_completed") === "true";
     setLoggedIn(Boolean(token));
     setRole(storedRole);
-    setApproved(storedRole === "ADMIN" || storedStatus === "APPROVED");
+    setApproved(storedRole === "ADMIN" || (storedStatus === "APPROVED" && storedSetupCompleted));
 
     const cached = localStorage.getItem(userCacheKey("donation_slug"));
     if (cached) setDonationSlug(cached);
@@ -31,10 +32,12 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         const nextRole = res.data?.role ?? storedRole;
         const nextStatus = res.data?.accountStatus ?? storedStatus;
         const nextSlug = res.data?.page?.slug;
+        const creatorSetupCompleted = Boolean(res.data?.creatorSetupCompleted);
         localStorage.setItem("tiphouse_role", nextRole);
         localStorage.setItem("tiphouse_account_status", nextStatus);
+        localStorage.setItem("tiphouse_creator_setup_completed", creatorSetupCompleted ? "true" : "false");
         setRole(nextRole);
-        setApproved(nextRole === "ADMIN" || nextStatus === "APPROVED");
+        setApproved(nextRole === "ADMIN" || (nextStatus === "APPROVED" && creatorSetupCompleted));
         if (nextSlug) {
           setDonationSlug(nextSlug);
           localStorage.setItem(userCacheKey("donation_slug"), nextSlug);

@@ -98,13 +98,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
   const amountNumber = Number(formState.amount || 0);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
+  const amountTooHigh = Boolean(formState.amount && amountNumber > 20000);
   const displayDonorName = formState.anonymous ? THAI_ANONYMOUS : formState.donorName.trim();
   const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
   const blockedMessage = hasBlockedWord(formState.message);
   const messageTooLong = formState.message.length > 250;
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
-    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
+    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount && amountNumber <= 20000);
   }, [amountNumber, blockedMessage, blockedName, formState, messageTooLong, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
@@ -245,9 +246,10 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 </div>
                 <label className="mt-3 block">
                   {t("กำหนดเอง", "Custom")}
-                  <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
+                  <input className={`input mt-2 ${amountTooLow || amountTooHigh ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} max={20000} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
                   {amountTooLow && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿{page.minAmount}</span>}
-                  {!amountTooLow && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {page.minAmount.toLocaleString("th-TH")} {t("บาท", "THB")}</span>}
+                  {amountTooHigh && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทสูงสุด 20,000 บาท", "Maximum donation is 20,000 THB")}</span>}
+                  {!amountTooLow && !amountTooHigh && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {page.minAmount.toLocaleString("th-TH")} - 20,000 {t("บาท", "THB")}</span>}
                 </label>
               </section>
               <section className="draft-panel grid gap-3">
@@ -376,7 +378,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               t("เลือกยอดโดเนทและกรอกชื่อ/ข้อความ", "Choose amount and enter name/message"),
               t("ตรวจสอบรายละเอียดก่อนชำระเงิน", "Review donation details"),
               t("สแกน QR และชำระเงินตามยอดที่แสดง", "Scan QR and pay the exact amount"),
-              t("กดตรวจสอบสถานะเพื่อส่ง Alert", "Check status to send the alert"),
+              t("การโดเนทเสร็จสิ้น", "Donation completed"),
             ].map((stepLabel, index) => (
               <div className="draft-step" key={stepLabel}>
                 <span className="draft-step-number">{index + 1}</span>

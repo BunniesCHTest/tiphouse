@@ -13,39 +13,55 @@ export class BootstrapService implements OnApplicationBootstrap {
 
   private async ensureAdminUser() {
     const passwordHash = await argon2.hash("Abc@1234");
-    const [byUsername, byEmail] = await Promise.all([
-      this.prisma.user.findUnique({ where: { username: "Test" }, select: { id: true } }),
-      this.prisma.user.findUnique({ where: { email: "admin@tiphouse.test" }, select: { id: true } }),
-    ]);
-    const existing = byEmail ?? byUsername;
-    if (byUsername && byEmail && byUsername.id !== byEmail.id) {
-      await this.prisma.user.update({
-        where: { id: byUsername.id },
-        data: { username: `Test-archived-${byUsername.id.slice(0, 8)}` },
-      });
-    }
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { in: ["AdminC", "Test"] } },
+          { email: "admin@tiphouse.test" },
+        ],
+      },
+      select: { id: true, username: true, email: true },
+    });
+    const existing =
+      candidates.find((item) => item.email === "admin@tiphouse.test") ??
+      candidates.find((item) => item.username === "AdminC") ??
+      candidates.find((item) => item.username === "Test");
+
     if (existing) {
+      const archiveTargets = candidates.filter((item) => item.id !== existing.id);
+      for (const target of archiveTargets) {
+        const suffix = target.id.slice(0, 8);
+        await this.prisma.user.update({
+          where: { id: target.id },
+          data: {
+            username: `${target.username || "admin"}-archived-${suffix}`.slice(0, 50),
+            email: `archived-${suffix}-${Date.now()}@tiphouse.local`,
+          },
+        });
+      }
       await this.prisma.user.update({
         where: { id: existing.id },
         data: {
-          username: "Test",
+          username: "AdminC",
           email: "admin@tiphouse.test",
           passwordHash,
           role: UserRole.ADMIN,
           accountStatus: "APPROVED",
           passwordMustChange: false,
+          creatorSetupCompleted: true,
         },
       });
       return;
     }
     await this.prisma.user.create({
       data: {
-        username: "Test",
+        username: "AdminC",
         email: "admin@tiphouse.test",
         passwordHash,
         role: UserRole.ADMIN,
         accountStatus: "APPROVED",
         passwordMustChange: false,
+        creatorSetupCompleted: true,
       },
     });
   }

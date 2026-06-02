@@ -73,7 +73,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
     return {
-      user: { id: user.id, email: user.email, username: user.username, role: user.role, accountStatus: user.accountStatus, passwordMustChange: user.passwordMustChange },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role, accountStatus: user.accountStatus, passwordMustChange: user.passwordMustChange, creatorSetupCompleted: user.creatorSetupCompleted },
       tokens: await this.signTokens(user.id, user.email, user.role),
     };
   }
@@ -143,7 +143,8 @@ export class AuthService {
         username: user.username,
         role: user.role,
         accountStatus: user.accountStatus,
-        onboardingRequired: (user as any).onboardingRequired ? "true" : "false",
+        creatorSetupCompleted: user.creatorSetupCompleted ? "true" : "false",
+        onboardingRequired: !(user as any).creatorSetupCompleted ? "true" : "false",
       }).toString();
       return res.redirect(redirect.toString());
     } catch (error) {
@@ -255,6 +256,7 @@ export class AuthService {
         email,
         passwordHash: await argon2.hash(randomBytes(32).toString("hex")),
         accountStatus: "APPROVED",
+        creatorSetupCompleted: false,
         page: {
           create: {
             slug,
@@ -271,7 +273,7 @@ export class AuthService {
         },
       },
     });
-    return { ...created, onboardingRequired: true };
+    return { ...created, creatorSetupCompleted: false, onboardingRequired: true };
   }
 
   private async connectStreamlabsToUser(userId: string, streamlabsUser: StreamlabsUserResponse, token: StreamlabsTokenResponse) {

@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export function AuthGate({ children, admin = false, allowPending = false }: { children: React.ReactNode; admin?: boolean; allowPending?: boolean }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [allowed, setAllowed] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -12,12 +15,17 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
     const token = localStorage.getItem("tiphouse_access_token");
     const role = localStorage.getItem("tiphouse_role");
     const accountStatus = localStorage.getItem("tiphouse_account_status");
+    const creatorSetupCompleted = localStorage.getItem("tiphouse_creator_setup_completed") === "true";
     const isAllowedRole = Boolean(token) && (!admin || role === "ADMIN" || role === "ACCOUNTING");
     const isApproved = admin || allowPending || accountStatus === "APPROVED";
+    if (token && !admin && role === "USER" && !creatorSetupCompleted && pathname !== "/onboarding") {
+      router.replace("/onboarding");
+      return;
+    }
     setAllowed(isAllowedRole && isApproved);
     setPendingApproval(Boolean(token) && isAllowedRole && !isApproved);
     setChecked(true);
-  }, [admin, allowPending]);
+  }, [admin, allowPending, pathname, router]);
 
   if (!checked) return <main className="grid min-h-screen place-items-center">Loading...</main>;
 

@@ -30,7 +30,7 @@ export default function AdminLoginPage() {
       localStorage.setItem("tiphouse_account_status", data.user.accountStatus);
       router.push(data.user.passwordMustChange ? "/control-admin/change-password" : "/control-admin");
     } catch {
-      if (isLocalhost() && form.get("username") === "Test" && form.get("password") === "Abc@1234") {
+      if (isLocalhost() && form.get("username") === "AdminC" && form.get("password") === "Abc@1234") {
         localStorage.setItem("tiphouse_access_token", "local-admin-token");
         localStorage.setItem("tiphouse_role", "ADMIN");
         router.push("/control-admin");
@@ -47,7 +47,7 @@ export default function AdminLoginPage() {
       <form onSubmit={login} className="card grid w-[min(460px,100%)] gap-4 p-6">
         <p className="font-bold text-mint">TipHouse Admin</p>
         <h1 className="text-4xl font-black">Admin Login</h1>
-        <label>Username<input className="input mt-2" name="username" placeholder="Test" required /></label>
+        <label>Username<input className="input mt-2" name="username" placeholder="AdminC" required /></label>
         <label>Password<input className="input mt-2" name="password" type="password" placeholder="Abc@1234" required /></label>
         {error && <p className="text-coral">{error}</p>}
         <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>

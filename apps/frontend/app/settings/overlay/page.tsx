@@ -344,7 +344,6 @@ export default function OverlaySettingsPage() {
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
   const previewUrl = `/overlay/${settings.streamerKey}?preview=1&donor=${encodeURIComponent(previewAlert.donorName)}&amount=${previewAlert.amount}&message=${encodeURIComponent(previewAlert.message)}`;
   const goalOverlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}?widget=goal`;
-  const goalPreviewUrl = `/overlay/${settings.streamerKey}?widget=goal&preview=1`;
   const previewSrcDoc = useMemo(() => previewDoc(settings, previewAlert), [settings, previewAlert]);
   const goalPreviewSrcDoc = useMemo(() => goalPreviewDoc(settings), [settings]);
   const [activeTab, setActiveTab] = useState<"alert" | "goal">("alert");
@@ -490,7 +489,6 @@ export default function OverlaySettingsPage() {
             {notice && <p className="text-mint">{notice}</p>}
             {error && <p className="text-coral">{error}</p>}
             <button className="btn btn-primary" type="submit">บันทึก Donate Goal</button>
-            <Link className="btn" href={goalPreviewUrl} target="_blank">เปิด Donate Goal</Link>
           </form>
           <div className={`card place-items-center p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
             <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />

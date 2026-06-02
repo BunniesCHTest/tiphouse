@@ -59,7 +59,7 @@ export class AdminController {
   async updateUser(@CurrentUser() admin: JwtUser, @Param("id") id: string, @Body() body: any) {
     this.requireAdmin(admin);
     const userData: any = {};
-    for (const key of ["username", "email", "role", "accountStatus", "pendingEmail"]) {
+    for (const key of ["username", "email", "role", "accountStatus", "donationNotificationEmail", "creatorSetupCompleted"]) {
       if (body[key] !== undefined) userData[key] = body[key];
     }
     const pageData: any = {};
@@ -134,6 +134,7 @@ export class AdminController {
         role: role as any,
         accountStatus: "APPROVED",
         passwordMustChange: true,
+        creatorSetupCompleted: true,
         passwordHash: await argon2.hash(tempPassword),
       },
       select: { id: true, username: true, email: true, role: true, accountStatus: true, createdAt: true },

@@ -14,7 +14,7 @@ export class DonationsService {
       include: { user: { include: { overlay: true } } },
     });
     if (!page) throw new NotFoundException("Donation page not found");
-    if (page.user.accountStatus !== "APPROVED") throw new NotFoundException("Donation page is waiting for approval");
+    if (page.user.accountStatus !== "APPROVED" || !page.user.creatorSetupCompleted) throw new NotFoundException("Donation page is not active");
     return {
       slug: page.slug,
       displayName: page.displayName,
@@ -96,6 +96,7 @@ export class DonationsService {
     if (!page) throw new NotFoundException("Donation page not found");
     if (page.user.accountStatus !== "APPROVED") throw new BadRequestException("Creator account is waiting for admin approval");
     if (dto.amount < page.minAmount) throw new BadRequestException(`Minimum donation is ${page.minAmount}`);
+    if (dto.amount > 20000) throw new BadRequestException("Maximum donation is 20000");
 
     const transactionRef = `TH-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const qrPayload = `TIPHOUSE|${page.donationAccountName}|${dto.amount}|${transactionRef}`;

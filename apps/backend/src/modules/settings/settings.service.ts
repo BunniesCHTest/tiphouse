@@ -20,7 +20,7 @@ export class SettingsService {
   getProfile(userId: string) {
     return this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, email: true, pendingEmail: true, role: true, accountStatus: true, page: true },
+      select: { id: true, username: true, email: true, role: true, accountStatus: true, creatorSetupCompleted: true, donationNotificationEmail: true, page: true },
     });
   }
 
@@ -42,6 +42,7 @@ export class SettingsService {
     await this.ensureApproved(userId);
     const displayName = dto.displayName.trim();
     const slug = dto.slug.trim().toLowerCase();
+    const donationNotificationEmail = dto.donationNotificationEmail?.trim().toLowerCase() || null;
 
     if (!/^[a-z0-9-]{4,20}$/.test(slug)) {
       throw new BadRequestException("Donation URL must be 4-20 lowercase letters, numbers, or hyphens");
@@ -60,6 +61,8 @@ export class SettingsService {
       where: { id: userId },
       data: {
         username: slug,
+        creatorSetupCompleted: true,
+        donationNotificationEmail,
         page: {
           upsert: {
             create: {
