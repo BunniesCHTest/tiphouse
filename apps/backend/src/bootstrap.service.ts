@@ -13,10 +13,17 @@ export class BootstrapService implements OnApplicationBootstrap {
 
   private async ensureAdminUser() {
     const passwordHash = await argon2.hash("Abc@1234");
-    const existing = await this.prisma.user.findFirst({
-      where: { OR: [{ username: "Test" }, { email: "admin@tiphouse.test" }] },
-      select: { id: true },
-    });
+    const [byUsername, byEmail] = await Promise.all([
+      this.prisma.user.findUnique({ where: { username: "Test" }, select: { id: true } }),
+      this.prisma.user.findUnique({ where: { email: "admin@tiphouse.test" }, select: { id: true } }),
+    ]);
+    const existing = byEmail ?? byUsername;
+    if (byUsername && byEmail && byUsername.id !== byEmail.id) {
+      await this.prisma.user.update({
+        where: { id: byUsername.id },
+        data: { username: `Test-archived-${byUsername.id.slice(0, 8)}` },
+      });
+    }
     if (existing) {
       await this.prisma.user.update({
         where: { id: existing.id },
