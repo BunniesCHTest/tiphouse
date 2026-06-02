@@ -59,3 +59,55 @@ body {
   font-size: 0.82rem;
   font-weight: 800;
 }
+
+.draft-band {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(56, 226, 194, 0.10), rgba(25, 185, 255, 0.07)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.phone-frame {
+  width: 100%;
+  max-width: 430px;
+  border-radius: 36px;
+  background: #071012;
+  padding: 14px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.phone-screen {
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(14, 25, 28, 0.96);
+}
+
+.draft-panel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 1rem;
+}
+
+.draft-step {
+  display: flex;
+  gap: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.85rem;
+}
+
+.draft-step-number {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(56, 226, 194, 0.16);
+  color: #a6f7c4;
+  font-weight: 900;
+}

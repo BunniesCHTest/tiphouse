@@ -48,7 +48,8 @@ function LoginContent() {
         window.location.href = data.url;
         return;
       }
-      setStreamlabsMessage("ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production");
+      const missing = Array.isArray(data.missing) && data.missing.length ? ` ขาด: ${data.missing.join(", ")}` : "";
+      setStreamlabsMessage(`ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production.${missing}`);
     } catch {
       setStreamlabsMessage("เชื่อมต่อ backend เพื่อเริ่ม Streamlabs login ไม่สำเร็จ");
     }

@@ -80,14 +80,22 @@ export class AuthService {
 
   streamlabsLoginUrl(userId?: string) {
     const clientId = this.config.get<string>("STREAMLABS_CLIENT_ID");
+    const clientSecret = this.config.get<string>("STREAMLABS_CLIENT_SECRET");
     const redirectUri = this.config.get<string>("STREAMLABS_REDIRECT_URI");
-    if (!clientId || !redirectUri) {
-      return { configured: false, url: null, message: "Streamlabs OAuth is not configured" };
+    const missing = [
+      !clientId ? "STREAMLABS_CLIENT_ID" : null,
+      !clientSecret ? "STREAMLABS_CLIENT_SECRET" : null,
+      !redirectUri ? "STREAMLABS_REDIRECT_URI" : null,
+    ].filter(Boolean);
+    if (missing.length) {
+      return { configured: false, url: null, message: "Streamlabs OAuth is not configured", missing };
     }
+    const configuredClientId = clientId as string;
+    const configuredRedirectUri = redirectUri as string;
     const state = this.signStreamlabsState(userId ? { mode: "connect", userId } : { mode: "login" });
     const url = new URL("https://streamlabs.com/api/v2.0/authorize");
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("client_id", configuredClientId);
+    url.searchParams.set("redirect_uri", configuredRedirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "donations.create donations.read alerts.create socket.token");
     url.searchParams.set("state", state);

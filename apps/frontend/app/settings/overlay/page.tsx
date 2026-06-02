@@ -270,7 +270,8 @@ export default function OverlaySettingsPage() {
     try {
       const { data } = await api.get("/auth/streamlabs/connect", { headers: authHeaders() });
       if (!data?.configured || !data?.url) {
-        setError("ยังไม่ได้ตั้งค่า Streamlabs OAuth ใน backend");
+        const missing = Array.isArray(data?.missing) && data.missing.length ? ` ขาด: ${data.missing.join(", ")}` : "";
+        setError(`ยังไม่ได้ตั้งค่า Streamlabs OAuth ใน backend.${missing}`);
         return;
       }
       window.location.href = data.url;

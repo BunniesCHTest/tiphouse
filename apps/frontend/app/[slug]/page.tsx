@@ -174,59 +174,83 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           </div>
         </div>
       </section>
-      <section className="mx-auto grid w-[min(1100px,calc(100%-2rem))] gap-5 py-8 lg:grid-cols-[1fr_.75fr]">
+      <section className="mx-auto grid w-[min(1180px,calc(100%-2rem))] gap-6 py-8 lg:grid-cols-[430px_1fr]">
         {!qr ? (
-          <form onSubmit={donate} className="card grid gap-4 p-5">
-            <label>
-              ชื่อผู้โดเนท
-              <input
-                className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
-                name="donorName"
-                value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
-                onChange={(event) => setFormState({ ...formState, donorName: event.target.value })}
-                disabled={formState.anonymous}
-                required={!formState.anonymous}
-              />
-            </label>
-            <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
-              แสดงเป็น Anonymous
-            </button>
-            <label>ข้อความ<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
-            <label>
-              จำนวนเงิน
-              <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
-              {amountTooLow && <span className="mt-2 block font-bold text-coral">ยอดโดเนทต้องไม่น้อยกว่า ฿{page.minAmount}</span>}
-            </label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {quickAmounts.map((amount) => (
-                <button
-                  key={amount}
-                  className={`btn ${amountNumber === amount ? "btn-primary" : ""}`}
-                  type="button"
-                  onClick={() => setFormState({ ...formState, amount: String(amount) })}
-                >
-                  ฿{amount.toLocaleString("th-TH")}
+          <div className="phone-frame">
+            <form onSubmit={donate} className="phone-screen grid gap-4 p-5">
+              <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-5 text-ink">
+                <p className="text-sm font-black uppercase">Viewer Donation</p>
+                <h2 className="mt-2 text-3xl font-black">{page.displayName}</h2>
+                <p className="mt-1 font-semibold opacity-75">ขั้นต่ำ ฿{page.minAmount.toLocaleString("th-TH")}</p>
+              </div>
+              <section className="draft-panel">
+                <div className="mb-3 font-black">เลือกจำนวนเงิน</div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {quickAmounts.map((amount) => (
+                    <button
+                      key={amount}
+                      className={`btn ${amountNumber === amount ? "btn-primary" : ""}`}
+                      type="button"
+                      onClick={() => setFormState({ ...formState, amount: String(amount) })}
+                    >
+                      ฿{amount.toLocaleString("th-TH")}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-3 block">
+                  กำหนดเอง
+                  <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
+                  {amountTooLow && <span className="mt-2 block font-bold text-coral">ยอดโดเนทต้องไม่น้อยกว่า ฿{page.minAmount}</span>}
+                </label>
+              </section>
+              <section className="draft-panel grid gap-3">
+                <label>
+                  ชื่อผู้โดเนท
+                  <input
+                    className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
+                    name="donorName"
+                    value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
+                    onChange={(event) => setFormState({ ...formState, donorName: event.target.value })}
+                    disabled={formState.anonymous}
+                    required={!formState.anonymous}
+                  />
+                </label>
+                <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
+                  แสดงเป็น Anonymous
                 </button>
-              ))}
-            </div>
-            {error && <p className="text-coral">{error}</p>}
-            <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>ดำเนินการโดเนท</button>
-          </form>
+              </section>
+              <section className="draft-panel">
+                <label>ข้อความถึงสตรีมเมอร์<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
+              </section>
+              {error && <p className="text-coral">{error}</p>}
+              <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>ดำเนินการโดเนท</button>
+            </form>
+          </div>
         ) : (
-          <aside className="card grid gap-4 p-5 text-center">
-            <h2 className="text-2xl font-black">PromptPay QR</h2>
-            <p className="text-white/60">สแกนแล้วจะแสดงชื่อบัญชีโดเนท: <strong className="text-white">{qr.qrDisplayName}</strong></p>
-            <img alt="PromptPay QR" src={qr.qrDataUrl} className="mx-auto size-64 rounded-lg bg-white p-3" />
-            <p className="text-sm text-white/45">Ref: {qr.transactionRef}</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <button className="btn btn-primary" type="button" onClick={completePaymentCheck}>จำลองตรวจสอบการโอนเงินสำเร็จ</button>
-              <button className="btn" type="button" onClick={cancelQr}>ยกเลิก QR code</button>
-            </div>
-          </aside>
+          <div className="phone-frame">
+            <aside className="phone-screen grid gap-4 p-5 text-center">
+              <h2 className="text-2xl font-black">PromptPay QR</h2>
+              <p className="text-white/60">สแกนแล้วจะแสดงชื่อบัญชีโดเนท: <strong className="text-white">{qr.qrDisplayName}</strong></p>
+              <img alt="PromptPay QR" src={qr.qrDataUrl} className="mx-auto size-64 rounded-lg bg-white p-3" />
+              <p className="text-sm text-white/45">Ref: {qr.transactionRef}</p>
+              <div className="grid gap-3">
+                <button className="btn btn-primary" type="button" onClick={completePaymentCheck}>จำลองตรวจสอบการโอนเงินสำเร็จ</button>
+                <button className="btn" type="button" onClick={cancelQr}>ยกเลิก QR code</button>
+              </div>
+            </aside>
+          </div>
         )}
-        <aside className="card grid content-start gap-4 p-5">
+        <aside className="draft-band grid content-start gap-4 p-5">
           <h2 className="text-2xl font-black">Donation Detail</h2>
           <p className="text-white/60">QR code จะแสดงหลังจากกรอกข้อมูลครบและกด “ดำเนินการโดเนท” เท่านั้น</p>
+          <div className="grid gap-2">
+            {["กรอกข้อมูลโดเนท", "ตรวจสอบ QR Payment", "ยืนยันชำระเงิน", "ส่ง Alert ไป OBS/Streamlabs"].map((step, index) => (
+              <div className="draft-step" key={step}>
+                <span className="draft-step-number">{index + 1}</span>
+                <span className="font-bold">{step}</span>
+              </div>
+            ))}
+          </div>
           <div className="border-t border-white/10 pt-4">
             <h3 className="text-xl font-black">Recent Donations</h3>
             <div className="mt-3 grid gap-3">
