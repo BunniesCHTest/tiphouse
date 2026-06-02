@@ -16,6 +16,9 @@ type OverlaySettings = {
   ttsEnabled: boolean;
   ttsVoice: "female" | "male";
   soundPreset: SoundPreset;
+  streamlabsAlertBoxEnabled: boolean;
+  streamlabsConnected: boolean;
+  streamlabsUsername?: string;
   widgetHtml: string;
   widgetCss: string;
   widgetJs: string;
@@ -104,6 +107,8 @@ const defaultSettings: OverlaySettings = {
   ttsEnabled: true,
   ttsVoice: "female",
   soundPreset: "chime",
+  streamlabsAlertBoxEnabled: false,
+  streamlabsConnected: false,
   widgetHtml: defaultWidgetHtml,
   widgetCss: defaultWidgetCss,
   widgetJs: defaultWidgetJs,
@@ -148,6 +153,9 @@ function normalizeOverlay(data: any, fallback: OverlaySettings = defaultSettings
     ttsEnabled: data?.ttsEnabled ?? fallback.ttsEnabled,
     ttsVoice: data?.theme?.ttsVoice ?? fallback.ttsVoice,
     soundPreset: data?.theme?.soundPreset ?? fallback.soundPreset,
+    streamlabsAlertBoxEnabled: data?.theme?.streamlabs?.alertBoxEnabled ?? fallback.streamlabsAlertBoxEnabled,
+    streamlabsConnected: data?.theme?.streamlabs?.connected ?? fallback.streamlabsConnected,
+    streamlabsUsername: data?.theme?.streamlabs?.username ?? fallback.streamlabsUsername,
     widgetHtml: data?.theme?.widgetHtml ?? fallback.widgetHtml,
     widgetCss: data?.theme?.widgetCss ?? fallback.widgetCss,
     widgetJs: data?.theme?.widgetJs ?? fallback.widgetJs,
@@ -173,6 +181,11 @@ function overlayPayload(settings: OverlaySettings) {
     theme: {
       ttsVoice: settings.ttsVoice,
       soundPreset: settings.soundPreset,
+      streamlabs: {
+        connected: settings.streamlabsConnected,
+        alertBoxEnabled: settings.streamlabsAlertBoxEnabled,
+        username: settings.streamlabsUsername,
+      },
       widgetHtml: settings.widgetHtml,
       widgetCss: settings.widgetCss,
       widgetJs: settings.widgetJs,
@@ -262,6 +275,8 @@ export default function OverlaySettingsPage() {
             <label>เสียงแจ้งเตือน<select className="input mt-2" name="soundPreset" value={settings.soundPreset} onChange={(event) => setSettings({ ...settings, soundPreset: event.target.value as SoundPreset })}>{soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
+            <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Streamlabs Alert Box สำหรับ Tips/Variation</label>
+            <p className="text-sm text-white/55">{settings.streamlabsConnected ? `เชื่อมต่อ Streamlabs แล้ว: ${settings.streamlabsUsername ?? "Streamlabs"}` : "ยังไม่ได้ Login ผ่าน Streamlabs จึงยังเปิดใช้งาน Alert Box Variation ไม่ได้"}</p>
             <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" name="widgetHtml" value={settings.widgetHtml} onChange={(event) => setSettings({ ...settings, widgetHtml: event.target.value })} /></label>
             <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" name="widgetCss" value={settings.widgetCss} onChange={(event) => setSettings({ ...settings, widgetCss: event.target.value })} /></label>
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" name="widgetJs" value={settings.widgetJs} onChange={(event) => setSettings({ ...settings, widgetJs: event.target.value })} /></label>

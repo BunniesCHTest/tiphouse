@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { createHash } from "crypto";
 import { DonationsService } from "../donations/donations.service";
 import { OverlayService } from "../overlay/overlay.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -46,6 +47,7 @@ export class PaymentsService {
 
   private async finalizePaidDonation(transactionRef: string) {
     const donation = await this.donations.markPaid(transactionRef);
+    await this.forwardDonationToStreamlabs(donation);
     const streamerKey = donation.user.overlay?.streamerKey;
     if (streamerKey) {
       this.overlay.emitPaidDonation(streamerKey, {
@@ -66,6 +68,56 @@ export class PaymentsService {
       });
     }
     return { ok: true, donationId: donation.id };
+  }
+
+  private async forwardDonationToStreamlabs(donation: Awaited<ReturnType<DonationsService["markPaid"]>>) {
+    const streamlabs = (donation.user.overlay?.theme as any)?.streamlabs;
+    if (!streamlabs?.connected || !streamlabs?.alertBoxEnabled || !streamlabs?.accessToken) return;
+    const donorName = donation.anonymous ? "Anonymous" : donation.donorName;
+    try {
+      const response = await fetch("https://streamlabs.com/api/v2.0/donations", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${streamlabs.accessToken}`,
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({
+          name: donorName.slice(0, 25).padEnd(2, "_"),
+          identifier: this.donorIdentifier(donation.id, donorName),
+          amount: donation.amount,
+          currency: "THB",
+          message: donation.message.slice(0, 254),
+          created_at: (donation.paidAt ?? new Date()).toISOString(),
+          skip_alert: "no",
+        }),
+      });
+      await this.prisma.webhookLog.create({
+        data: {
+          provider: "STREAMLABS",
+          eventType: "donations.create",
+          signatureOk: response.ok,
+          payload: {
+            donationId: donation.id,
+            status: response.status,
+            ok: response.ok,
+          },
+        },
+      });
+    } catch (error) {
+      await this.prisma.webhookLog.create({
+        data: {
+          provider: "STREAMLABS",
+          eventType: "donations.create",
+          signatureOk: false,
+          payload: { donationId: donation.id, error: error instanceof Error ? error.message : "unknown" },
+        },
+      });
+    }
+  }
+
+  private donorIdentifier(donationId: string, donorName: string) {
+    return createHash("sha256").update(`${donationId}:${donorName}`).digest("hex");
   }
 
   private verifyWebhookSignature(provider: string, payload: unknown, signature?: string, secret?: string) {

@@ -56,7 +56,8 @@ export class SettingsService {
 
   async updateOverlay(userId: string, dto: UpdateOverlayDto) {
     await this.ensureApproved(userId);
-    const theme = dto.theme as Prisma.InputJsonValue | undefined;
+    const current = await this.prisma.overlaySetting.findUnique({ where: { userId } });
+    const theme = this.mergeOverlayTheme(current?.theme, dto.theme) as Prisma.InputJsonValue | undefined;
     const animation = dto.animation as Prisma.InputJsonValue | undefined;
     return this.prisma.overlaySetting.upsert({
       where: { userId },
@@ -123,5 +124,24 @@ export class SettingsService {
       if (!existing) return token;
     }
     throw new Error("Unable to generate unique overlay token");
+  }
+
+  private mergeOverlayTheme(currentTheme: unknown, nextTheme?: Record<string, unknown>) {
+    if (!nextTheme) return undefined;
+    const current = typeof currentTheme === "object" && currentTheme ? currentTheme as Record<string, any> : {};
+    const next = { ...nextTheme } as Record<string, any>;
+    if (current.streamlabs || next.streamlabs) {
+      next.streamlabs = {
+        ...(current.streamlabs ?? {}),
+        ...(next.streamlabs ?? {}),
+        accessToken: current.streamlabs?.accessToken,
+        refreshToken: current.streamlabs?.refreshToken,
+        tokenType: current.streamlabs?.tokenType,
+        userId: current.streamlabs?.userId ?? next.streamlabs?.userId,
+        connectedAt: current.streamlabs?.connectedAt ?? next.streamlabs?.connectedAt,
+        connected: Boolean(current.streamlabs?.connected ?? next.streamlabs?.connected),
+      };
+    }
+    return JSON.parse(JSON.stringify(next));
   }
 }

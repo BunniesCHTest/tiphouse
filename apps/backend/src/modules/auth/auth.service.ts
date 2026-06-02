@@ -3,9 +3,19 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
+import type { Response } from "express";
 import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
+
+type StreamlabsTokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+};
+
+type StreamlabsUserResponse = Record<string, any>;
 
 @Injectable()
 export class AuthService {
@@ -72,16 +82,34 @@ export class AuthService {
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "donations.read socket.token");
+    url.searchParams.set("scope", "donations.create donations.read alerts.create socket.token");
+    url.searchParams.set("state", randomBytes(16).toString("hex"));
     return { configured: true, url: url.toString() };
   }
 
-  streamlabsCallback(code: string) {
-    return {
-      ok: true,
-      codeReceived: Boolean(code),
-      message: "Exchange this code server-side for Streamlabs tokens before production launch.",
-    };
+  async streamlabsCallback(code: string, res: Response) {
+    const frontendUrl = this.config.get<string>("FRONTEND_URL", "http://127.0.0.1:3000");
+    try {
+      if (!code) throw new UnauthorizedException("Missing Streamlabs authorization code");
+      const token = await this.exchangeStreamlabsCode(code);
+      const streamlabsUser = await this.fetchStreamlabsUser(token.access_token);
+      const user = await this.upsertStreamlabsUser(streamlabsUser, token);
+      const tokens = await this.signTokens(user.id, user.email, user.role);
+      const redirect = new URL("/streamlabs/callback", frontendUrl);
+      redirect.hash = new URLSearchParams({
+        accessToken: tokens.accessToken,
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        accountStatus: user.accountStatus,
+      }).toString();
+      return res.redirect(redirect.toString());
+    } catch {
+      const redirect = new URL("/login", frontendUrl);
+      redirect.searchParams.set("streamlabs", "failed");
+      return res.redirect(redirect.toString());
+    }
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {
@@ -116,6 +144,139 @@ export class AuthService {
       this.prisma.passwordResetToken.update({ where: { id: reset.id }, data: { usedAt: new Date() } }),
     ]);
     return { ok: true };
+  }
+
+  private async exchangeStreamlabsCode(code: string): Promise<StreamlabsTokenResponse> {
+    const clientId = this.config.getOrThrow<string>("STREAMLABS_CLIENT_ID");
+    const clientSecret = this.config.getOrThrow<string>("STREAMLABS_CLIENT_SECRET");
+    const redirectUri = this.config.getOrThrow<string>("STREAMLABS_REDIRECT_URI");
+    const response = await fetch("https://streamlabs.com/api/v2.0/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        code,
+      }),
+    });
+    if (!response.ok) throw new UnauthorizedException("Streamlabs token exchange failed");
+    return response.json() as Promise<StreamlabsTokenResponse>;
+  }
+
+  private async fetchStreamlabsUser(accessToken: string): Promise<StreamlabsUserResponse> {
+    const response = await fetch("https://streamlabs.com/api/v2.0/user", {
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+    if (!response.ok) throw new UnauthorizedException("Streamlabs user lookup failed");
+    return response.json() as Promise<StreamlabsUserResponse>;
+  }
+
+  private async upsertStreamlabsUser(streamlabsUser: StreamlabsUserResponse, token: StreamlabsTokenResponse) {
+    const streamlabsId = String(streamlabsUser.id ?? streamlabsUser.streamlabs?.id ?? streamlabsUser.user?.id ?? streamlabsUser.username ?? streamlabsUser.display_name ?? "unknown");
+    const displayName = String(streamlabsUser.display_name ?? streamlabsUser.name ?? streamlabsUser.username ?? streamlabsUser.channel ?? `streamlabs-${streamlabsId}`);
+    const usernameBase = this.slugify(String(streamlabsUser.username ?? displayName ?? `streamlabs-${streamlabsId}`));
+    const email = this.extractEmail(streamlabsUser) ?? `streamlabs-${streamlabsId}@tiphouse.local`;
+    const existing = await this.findStreamlabsUser(streamlabsId, email);
+    const streamlabsTheme = (currentTheme: unknown) => this.cleanJson({
+      ...(typeof currentTheme === "object" && currentTheme ? currentTheme : {}),
+      streamlabs: this.cleanJson({
+        connected: true,
+        alertBoxEnabled: true,
+        userId: streamlabsId,
+        username: displayName,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token,
+        tokenType: token.token_type ?? "Bearer",
+        connectedAt: new Date().toISOString(),
+      }),
+    });
+
+    if (existing) {
+      const overlay = existing.overlay;
+      await this.prisma.overlaySetting.upsert({
+        where: { userId: existing.id },
+        update: { theme: streamlabsTheme(overlay?.theme) as Prisma.InputJsonValue },
+        create: { userId: existing.id, theme: streamlabsTheme({}) as Prisma.InputJsonValue, animation: { position: "Center", durationSeconds: 7 } },
+      });
+      return this.prisma.user.findUniqueOrThrow({ where: { id: existing.id } });
+    }
+
+    const username = await this.uniqueUsername(usernameBase || `streamlabs-${streamlabsId}`);
+    const slug = await this.uniqueSlug(username);
+    return this.prisma.user.create({
+      data: {
+        username,
+        email,
+        passwordHash: await argon2.hash(randomBytes(32).toString("hex")),
+        accountStatus: "APPROVED",
+        page: {
+          create: {
+            slug,
+            displayName,
+            handle: `@${username}`,
+            theme: { name: "Aurora Mint", accent: "#38e2c2" },
+          },
+        },
+        overlay: {
+          create: {
+            theme: streamlabsTheme({}),
+            animation: { position: "Center", durationSeconds: 7 },
+          },
+        },
+      },
+    });
+  }
+
+  private async findStreamlabsUser(streamlabsId: string, email: string) {
+    const byEmail = await this.prisma.user.findUnique({ where: { email }, include: { overlay: true } });
+    if (byEmail) return byEmail;
+    const users = await this.prisma.user.findMany({ include: { overlay: true } });
+    return users.find((user) => {
+      const theme = user.overlay?.theme as any;
+      return theme?.streamlabs?.userId === streamlabsId;
+    });
+  }
+
+  private extractEmail(streamlabsUser: StreamlabsUserResponse) {
+    const candidate = streamlabsUser.email ?? streamlabsUser.user?.email ?? streamlabsUser.streamlabs?.email;
+    return typeof candidate === "string" && candidate.includes("@") ? candidate : null;
+  }
+
+  private async uniqueUsername(base: string) {
+    let candidate = base.slice(0, 40) || "streamlabs";
+    for (let index = 0; index < 20; index += 1) {
+      const exists = await this.prisma.user.findUnique({ where: { username: candidate } });
+      if (!exists) return candidate;
+      candidate = `${base.slice(0, 34)}${index + 1}`;
+    }
+    return `${base.slice(0, 30)}${randomBytes(3).toString("hex")}`;
+  }
+
+  private async uniqueSlug(base: string) {
+    let candidate = base.slice(0, 90) || "streamlabs";
+    for (let index = 0; index < 20; index += 1) {
+      const exists = await this.prisma.donationPage.findUnique({ where: { slug: candidate } });
+      if (!exists) return candidate;
+      candidate = `${base.slice(0, 84)}-${index + 1}`;
+    }
+    return `${base.slice(0, 80)}-${randomBytes(3).toString("hex")}`;
+  }
+
+  private slugify(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
+  }
+
+  private cleanJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
   }
 
   private async signTokens(userId: string, email: string, role: string) {

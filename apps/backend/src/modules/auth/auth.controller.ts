@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { AuthService } from "./auth.service";
 import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
@@ -32,7 +33,7 @@ export class AuthController {
   }
 
   @Get("streamlabs/callback")
-  streamlabsCallback(@Query("code") code: string) {
-    return this.auth.streamlabsCallback(code);
+  streamlabsCallback(@Query("code") code: string, @Res() res: Response) {
+    return this.auth.streamlabsCallback(code, res);
   }
 }
