@@ -12,6 +12,8 @@ type UserRow = {
   email: string;
   role: string;
   accountStatus: string;
+  authProvider?: string;
+  streamlabsUsername?: string | null;
   pendingEmail?: string | null;
   page?: { slug: string; displayName: string; minAmount: number; goalAmount: number } | null;
   _count?: { donations: number; approvals: number };
@@ -238,18 +240,17 @@ export default function AdminPage() {
           <section className="card mt-5 overflow-auto p-4">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
-                <tr><th>User</th><th>Email</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th>ขั้นต่ำ</th><th>Donations</th><th></th></tr>
+                <tr><th>User</th><th>Email</th><th>Login</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id} className="border-t border-white/10">
                     <td className="py-3 font-bold">{user.username}</td>
                     <td>{user.email}{user.pendingEmail && <span className="block text-gold">รออีเมล: {user.pendingEmail}</span>}</td>
+                    <td>{user.authProvider ?? "Email"}{user.streamlabsUsername && <span className="block text-mint">@{user.streamlabsUsername}</span>}</td>
                     <td>{user.accountStatus}</td>
                     <td>{user.role}</td>
                     <td>/{user.page?.slug}</td>
-                    <td>{user.page?.minAmount}</td>
-                    <td>{user._count?.donations ?? 0}</td>
                     <td className="flex gap-2 py-2">
                       <button className="btn" onClick={() => setSelectedUser(user)} type="button">แก้ไข</button>
                       <button className="btn" onClick={() => showUserHistory(user)} type="button">ประวัติ</button>

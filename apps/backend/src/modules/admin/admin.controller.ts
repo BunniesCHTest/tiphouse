@@ -26,7 +26,7 @@ export class AdminController {
   @Get("users")
   async users(@CurrentUser() user: JwtUser, @Query("q") q?: string) {
     this.requireAdmin(user);
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: q
         ? {
             OR: [
@@ -39,6 +39,14 @@ export class AdminController {
         : undefined,
       orderBy: { createdAt: "desc" },
       include: { page: true, payout: true, overlay: true, _count: { select: { donations: true, approvals: true } } },
+    });
+    return users.map((item) => {
+      const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
+      return {
+        ...item,
+        authProvider: streamlabs?.connected ? "Streamlabs" : "Email",
+        streamlabsUsername: streamlabs?.username ?? null,
+      };
     });
   }
 

@@ -10,8 +10,27 @@ export class OverlayService {
   ) {}
 
   async getSettings(streamerKey: string) {
-    const overlay = await this.prisma.overlaySetting.findUnique({ where: { streamerKey } });
-    return overlay;
+    const overlay = await this.prisma.overlaySetting.findUnique({
+      where: { streamerKey },
+      include: { user: { include: { page: true } } },
+    });
+    if (!overlay) return null;
+    const total = await this.prisma.donation.aggregate({
+      where: { userId: overlay.userId, paymentStatus: "PAID" },
+      _sum: { amount: true },
+    });
+    const theme = typeof overlay.theme === "object" && overlay.theme ? overlay.theme as Record<string, any> : {};
+    const donateGoal = typeof theme.donateGoal === "object" && theme.donateGoal ? theme.donateGoal : {};
+    return {
+      ...overlay,
+      donationGoal: {
+        title: donateGoal.title ?? overlay.user.page?.displayName ?? "Donate Goal",
+        currentAmount: total._sum.amount ?? 0,
+        targetAmount: donateGoal.targetAmount ?? overlay.user.page?.goalAmount ?? 0,
+        startAmount: 0,
+      },
+      user: undefined,
+    };
   }
 
   emitPaidDonation(streamerKey: string, payload: unknown) {

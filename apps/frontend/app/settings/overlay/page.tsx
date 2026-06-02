@@ -24,6 +24,13 @@ type OverlaySettings = {
   widgetHtml: string;
   widgetCss: string;
   widgetJs: string;
+  goalTitle: string;
+  goalTargetAmount: number;
+  goalStartDate: string;
+  goalEndDate: string;
+  goalHtml: string;
+  goalCss: string;
+  goalJs: string;
 };
 
 type TestAlert = {
@@ -109,6 +116,66 @@ if (alertBox) {
   ], { duration: 450, easing: "ease-out", fill: "both" });
 }`;
 
+const defaultGoalHtml = `<div class="tiphouse-goal">
+  <div class="goal-title">{{goalTitle}}</div>
+  <div class="goal-track">
+    <div class="goal-fill" style="width: {{progressPercent}}%"></div>
+    <div class="goal-label">{{currentAmountBaht}} ({{progressPercent}}%)</div>
+  </div>
+  <div class="goal-range">
+    <span>฿0</span>
+    <span>{{targetAmountBaht}}</span>
+  </div>
+</div>`;
+
+const defaultGoalCss = `.tiphouse-goal {
+  width: min(960px, 92vw);
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  text-shadow: 0 0 14px rgba(0, 0, 0, .55);
+}
+.goal-title {
+  font-size: 28px;
+  font-weight: 900;
+  margin-bottom: 14px;
+}
+.goal-track {
+  position: relative;
+  overflow: hidden;
+  height: 48px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-radius: 8px;
+  background: linear-gradient(#cfcfcf, #797979);
+  box-shadow: inset 0 0 16px rgba(0,0,0,.55);
+}
+.goal-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #32d56f, #20b8f1);
+}
+.goal-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 900;
+}
+.goal-range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24px;
+  font-weight: 900;
+}`;
+
+const defaultGoalJs = `const bar = root.querySelector(".goal-fill");
+if (bar) {
+  bar.animate([
+    { width: "0%" },
+    { width: "{{progressPercent}}%" }
+  ], { duration: 700, easing: "ease-out", fill: "both" });
+}`;
+
 const defaultSettings: OverlaySettings = {
   streamerKey: "",
   position: "Center",
@@ -123,6 +190,13 @@ const defaultSettings: OverlaySettings = {
   widgetHtml: defaultWidgetHtml,
   widgetCss: defaultWidgetCss,
   widgetJs: defaultWidgetJs,
+  goalTitle: "Donate Goal",
+  goalTargetAmount: 10000,
+  goalStartDate: "2026-05-03",
+  goalEndDate: "2026-12-31",
+  goalHtml: defaultGoalHtml,
+  goalCss: defaultGoalCss,
+  goalJs: defaultGoalJs,
 };
 
 const testAlerts: TestAlert[] = [
@@ -161,17 +235,24 @@ function normalizeOverlay(data: any, fallback: OverlaySettings = defaultSettings
     streamerKey: data?.streamerKey ?? fallback.streamerKey,
     position: data?.animation?.position ?? fallback.position,
     durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? fallback.durationSeconds,
-    alertImageUrl: data?.theme?.alertImageUrl ?? fallback.alertImageUrl,
-    customSoundUrl: data?.soundUrl ?? data?.theme?.customSoundUrl ?? fallback.customSoundUrl,
+    alertImageUrl: data?.theme?.alertImageUrl ?? data?.alertImageUrl ?? fallback.alertImageUrl,
+    customSoundUrl: data?.soundUrl ?? data?.theme?.customSoundUrl ?? data?.customSoundUrl ?? fallback.customSoundUrl,
     ttsEnabled: data?.ttsEnabled ?? fallback.ttsEnabled,
     ttsVoice: data?.theme?.ttsVoice ?? fallback.ttsVoice,
     soundPreset: data?.theme?.soundPreset ?? fallback.soundPreset,
     streamlabsAlertBoxEnabled: data?.theme?.streamlabs?.alertBoxEnabled ?? fallback.streamlabsAlertBoxEnabled,
     streamlabsConnected: data?.theme?.streamlabs?.connected ?? fallback.streamlabsConnected,
     streamlabsUsername: data?.theme?.streamlabs?.username ?? fallback.streamlabsUsername,
-    widgetHtml: data?.theme?.widgetHtml ?? fallback.widgetHtml,
-    widgetCss: data?.theme?.widgetCss ?? fallback.widgetCss,
-    widgetJs: data?.theme?.widgetJs ?? fallback.widgetJs,
+    widgetHtml: data?.theme?.widgetHtml ?? data?.widgetHtml ?? fallback.widgetHtml,
+    widgetCss: data?.theme?.widgetCss ?? data?.widgetCss ?? fallback.widgetCss,
+    widgetJs: data?.theme?.widgetJs ?? data?.widgetJs ?? fallback.widgetJs,
+    goalTitle: data?.theme?.donateGoal?.title ?? data?.goalTitle ?? fallback.goalTitle,
+    goalTargetAmount: data?.theme?.donateGoal?.targetAmount ?? data?.goalTargetAmount ?? fallback.goalTargetAmount,
+    goalStartDate: data?.theme?.donateGoal?.startDate ?? data?.goalStartDate ?? fallback.goalStartDate,
+    goalEndDate: data?.theme?.donateGoal?.endDate ?? data?.goalEndDate ?? fallback.goalEndDate,
+    goalHtml: data?.theme?.donateGoal?.html ?? data?.goalHtml ?? fallback.goalHtml,
+    goalCss: data?.theme?.donateGoal?.css ?? data?.goalCss ?? fallback.goalCss,
+    goalJs: data?.theme?.donateGoal?.js ?? data?.goalJs ?? fallback.goalJs,
   };
 }
 
@@ -206,15 +287,44 @@ function overlayPayload(settings: OverlaySettings) {
       widgetHtml: settings.widgetHtml,
       widgetCss: settings.widgetCss,
       widgetJs: settings.widgetJs,
+      donateGoal: {
+        title: settings.goalTitle,
+        targetAmount: settings.goalTargetAmount,
+        startDate: settings.goalStartDate,
+        endDate: settings.goalEndDate,
+        html: settings.goalHtml,
+        css: settings.goalCss,
+        js: settings.goalJs,
+      },
     },
     animation: { position: settings.position, durationSeconds: settings.durationSeconds },
   };
+}
+
+function fillGoalTemplate(value: string, settings: OverlaySettings, currentAmount = 100) {
+  const targetAmount = Math.max(1, Number(settings.goalTargetAmount || 1));
+  const progressPercent = Math.min(100, Math.round((currentAmount / targetAmount) * 100));
+  const replacements: Record<string, string> = {
+    goalTitle: settings.goalTitle,
+    currentAmount: String(currentAmount),
+    currentAmountBaht: `฿${currentAmount.toLocaleString("th-TH")}`,
+    targetAmount: String(targetAmount),
+    targetAmountBaht: `฿${targetAmount.toLocaleString("th-TH")}`,
+    progressPercent: String(progressPercent),
+    overAmount: String(Math.max(0, currentAmount - targetAmount)),
+  };
+  return Object.entries(replacements).reduce((result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement), value);
 }
 
 function previewDoc(settings: OverlaySettings, alert: TestAlert) {
   const imageHtml = settings.alertImageUrl ? `<img class="tiphouse-image" src="${settings.alertImageUrl}" alt="" />` : "";
   const replacements = settings.widgetHtml.replaceAll("{{imageUrl}}", settings.alertImageUrl ?? "").replaceAll("{{imageHtml}}", imageHtml);
   return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(replacements, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
+}
+
+function goalPreviewDoc(settings: OverlaySettings) {
+  const currentAmount = Math.max(100, Math.round(settings.goalTargetAmount * 0.42));
+  return `<!doctype html><html><head><style>html,body{margin:0;background:#2e2e2e;min-height:100%;display:grid;place-items:center}${fillGoalTemplate(settings.goalCss, settings, currentAmount)}</style></head><body>${fillGoalTemplate(settings.goalHtml, settings, currentAmount)}<script>${fillGoalTemplate(settings.goalJs, settings, currentAmount)}</script></body></html>`;
 }
 
 function fileToDataUrl(file: File) {
@@ -233,7 +343,11 @@ export default function OverlaySettingsPage() {
   const [previewAlert, setPreviewAlert] = useState<TestAlert>(randomTestAlert);
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
   const previewUrl = `/overlay/${settings.streamerKey}?preview=1&donor=${encodeURIComponent(previewAlert.donorName)}&amount=${previewAlert.amount}&message=${encodeURIComponent(previewAlert.message)}`;
+  const goalOverlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}?widget=goal`;
+  const goalPreviewUrl = `/overlay/${settings.streamerKey}?widget=goal&preview=1`;
   const previewSrcDoc = useMemo(() => previewDoc(settings, previewAlert), [settings, previewAlert]);
+  const goalPreviewSrcDoc = useMemo(() => goalPreviewDoc(settings), [settings]);
+  const [activeTab, setActiveTab] = useState<"alert" | "goal">("alert");
 
   useEffect(() => {
     if (window.location.search.includes("streamlabs=connected")) {
@@ -326,8 +440,12 @@ export default function OverlaySettingsPage() {
       <main className="mx-auto w-[min(1100px,calc(100%-2rem))] py-10">
         <p className="font-bold text-mint">Browser Source</p>
         <h1 className="mt-3 text-5xl font-black">ตั้งค่า Overlay</h1>
-        <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_.8fr]">
-          <form onSubmit={submit} className="card grid gap-4 p-5">
+        <div className="mt-8 flex flex-wrap gap-2">
+          <button className={`btn ${activeTab === "alert" ? "btn-primary" : ""}`} type="button" onClick={() => setActiveTab("alert")}>ตั้งค่า Overlay</button>
+          <button className={`btn ${activeTab === "goal" ? "btn-primary" : ""}`} type="button" onClick={() => setActiveTab("goal")}>ตั้งค่า Donate Goal</button>
+        </div>
+        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_.8fr]">
+          <form onSubmit={submit} className={`card gap-4 p-5 ${activeTab === "alert" ? "grid" : "hidden"}`}>
             <label>Overlay URL<input className="input mt-2" readOnly value={overlayUrl} /></label>
             <button className="btn" type="button" onClick={resetOverlayUrl}>Reset Overlay URL</button>
             <p className="text-sm text-white/55">URL นี้สุ่มเฉพาะ Account ของคุณและระบบตรวจไม่ให้ซ้ำกับ User คนอื่น</p>
@@ -354,8 +472,28 @@ export default function OverlaySettingsPage() {
             <button className="btn" type="button" onClick={testOverlay}>ทดสอบ Overlay</button>
             <Link className="btn" href={previewUrl} target="_blank">เปิด Overlay</Link>
           </form>
-          <div className="card grid place-items-center p-5">
+          <div className={`card place-items-center p-5 ${activeTab === "alert" ? "grid" : "hidden"}`}>
             <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" srcDoc={previewSrcDoc} title="Overlay preview" />
+          </div>
+          <form onSubmit={submit} className={`card gap-4 p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
+            <label>Donate Goal URL<input className="input mt-2" readOnly value={goalOverlayUrl} /></label>
+            <label>ชื่อ Goal<input className="input mt-2" value={settings.goalTitle} onChange={(event) => setSettings({ ...settings, goalTitle: event.target.value })} /></label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label>วันที่เริ่ม<input className="input mt-2" type="date" value={settings.goalStartDate} onChange={(event) => setSettings({ ...settings, goalStartDate: event.target.value })} /></label>
+              <label>วันที่สิ้นสุด<input className="input mt-2" type="date" value={settings.goalEndDate} onChange={(event) => setSettings({ ...settings, goalEndDate: event.target.value })} /></label>
+            </div>
+            <label>เป้าหมาย<input className="input mt-2" type="number" min="1" value={settings.goalTargetAmount} onChange={(event) => setSettings({ ...settings, goalTargetAmount: Number(event.target.value) })} /></label>
+            <p className="text-sm text-white/55">เมื่อยอดโดเนทเกินเป้า หลอดจะแสดงเต็ม 100% แต่ตัวเลขยอดโดเนทจะแสดงยอดจริงเสมอ</p>
+            <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" value={settings.goalHtml} onChange={(event) => setSettings({ ...settings, goalHtml: event.target.value })} /></label>
+            <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" value={settings.goalCss} onChange={(event) => setSettings({ ...settings, goalCss: event.target.value })} /></label>
+            <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" value={settings.goalJs} onChange={(event) => setSettings({ ...settings, goalJs: event.target.value })} /></label>
+            {notice && <p className="text-mint">{notice}</p>}
+            {error && <p className="text-coral">{error}</p>}
+            <button className="btn btn-primary" type="submit">บันทึก Donate Goal</button>
+            <Link className="btn" href={goalPreviewUrl} target="_blank">เปิด Donate Goal</Link>
+          </form>
+          <div className={`card place-items-center p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
+            <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />
           </div>
         </section>
       </main>

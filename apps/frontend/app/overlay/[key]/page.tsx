@@ -27,6 +27,16 @@ type OverlaySettings = {
   widgetHtml?: string;
   widgetCss?: string;
   widgetJs?: string;
+  donateGoal?: {
+    title?: string;
+    targetAmount?: number;
+    startDate?: string;
+    endDate?: string;
+    html?: string;
+    css?: string;
+    js?: string;
+    currentAmount?: number;
+  };
 };
 
 const THAI_DIGITS = [
@@ -50,6 +60,9 @@ const THAI_ANONYMOUS = "\u0e1a\u0e38\u0e04\u0e04\u0e25\u0e19\u0e34\u0e23\u0e19\u
 const THAI_DONATE = "\u0e42\u0e14\u0e40\u0e19\u0e17";
 const THAI_MESSAGE_PREFIX = "\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21\u0e27\u0e48\u0e32";
 const THAI_PREVIEW_MESSAGE = "\u0e2a\u0e39\u0e49\u0e46\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a";
+const defaultGoalHtml = `<div class="tiphouse-goal"><div class="goal-title">{{goalTitle}}</div><div class="goal-track"><div class="goal-fill" style="width: {{progressPercent}}%"></div><div class="goal-label">{{currentAmountBaht}} ({{progressPercent}}%)</div></div><div class="goal-range"><span>฿0</span><span>{{targetAmountBaht}}</span></div></div>`;
+const defaultGoalCss = `.tiphouse-goal{width:min(960px,92vw);color:#fff;font-family:Arial,sans-serif;text-align:center}.goal-title{font-size:28px;font-weight:900;margin-bottom:14px}.goal-track{position:relative;overflow:hidden;height:48px;border:2px solid rgba(255,255,255,.35);border-radius:8px;background:linear-gradient(#cfcfcf,#797979);box-shadow:inset 0 0 16px rgba(0,0,0,.55)}.goal-fill{height:100%;background:linear-gradient(90deg,#32d56f,#20b8f1)}.goal-label{position:absolute;inset:0;display:grid;place-items:center;font-size:24px;font-weight:900}.goal-range{display:flex;justify-content:space-between;font-size:24px;font-weight:900}`;
+const defaultGoalJs = `const bar=root.querySelector(".goal-fill");if(bar){bar.animate([{width:"0%"},{width:"{{progressPercent}}%"}],{duration:700,easing:"ease-out",fill:"both"});}`;
 
 function normalizeSettings(data: any): OverlaySettings {
   return {
@@ -63,6 +76,15 @@ function normalizeSettings(data: any): OverlaySettings {
     widgetHtml: data?.theme?.widgetHtml,
     widgetCss: data?.theme?.widgetCss,
     widgetJs: data?.theme?.widgetJs,
+    donateGoal: {
+      ...(data?.theme?.donateGoal ?? {}),
+      currentAmount: data?.donationGoal?.currentAmount ?? data?.theme?.donateGoal?.currentAmount ?? 0,
+      targetAmount: data?.donationGoal?.targetAmount ?? data?.theme?.donateGoal?.targetAmount ?? 0,
+      title: data?.theme?.donateGoal?.title ?? data?.donationGoal?.title,
+      html: data?.theme?.donateGoal?.html ?? defaultGoalHtml,
+      css: data?.theme?.donateGoal?.css ?? defaultGoalCss,
+      js: data?.theme?.donateGoal?.js ?? defaultGoalJs,
+    },
   };
 }
 
@@ -129,6 +151,26 @@ function fillTemplate(value: string | undefined, payload: AlertPayload) {
     (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
     value,
   );
+}
+
+function fillGoalTemplate(value: string | undefined, settings: OverlaySettings) {
+  if (!value) return "";
+  const goal = settings.donateGoal ?? {};
+  const currentAmount = Number(goal.currentAmount ?? 0);
+  const targetAmount = Math.max(1, Number(goal.targetAmount ?? 1));
+  const progressPercent = Math.min(100, Math.round((currentAmount / targetAmount) * 100));
+  const replacements: Record<string, string> = {
+    goalTitle: goal.title ?? "Donate Goal",
+    currentAmount: String(currentAmount),
+    currentAmountBaht: `฿${currentAmount.toLocaleString("th-TH")}`,
+    targetAmount: String(targetAmount),
+    targetAmountBaht: `฿${targetAmount.toLocaleString("th-TH")}`,
+    progressPercent: String(progressPercent),
+    overAmount: String(Math.max(0, currentAmount - targetAmount)),
+    startDate: goal.startDate ?? "",
+    endDate: goal.endDate ?? "",
+  };
+  return Object.entries(replacements).reduce((result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement), value);
 }
 
 async function ensureVoicesLoaded() {
@@ -258,6 +300,7 @@ async function playPresetSound(preset: SoundPreset | undefined) {
 export default function OverlayPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = use(params);
   const searchParams = useSearchParams();
+  const widget = searchParams.get("widget") === "goal" ? "goal" : "alert";
   const [alert, setAlert] = useState<AlertPayload | null>(null);
   const [settings, setSettings] = useState<OverlaySettings>({});
   const queueRef = useRef<AlertPayload[]>([]);
@@ -296,11 +339,13 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
 
     loadSettings().then(() => {
       if (searchParams.get("preview") === "1") {
-        enqueueAlert({
-          donorName: searchParams.get("donor") || "Preview",
-          amount: Number(searchParams.get("amount") || 100),
-          message: searchParams.get("message") || THAI_PREVIEW_MESSAGE,
-        });
+        if (widget === "alert") {
+          enqueueAlert({
+            donorName: searchParams.get("donor") || "Preview",
+            amount: Number(searchParams.get("amount") || 100),
+            message: searchParams.get("message") || THAI_PREVIEW_MESSAGE,
+          });
+        }
       }
     });
     const onStorage = (event: StorageEvent) => {
@@ -322,7 +367,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", loadSettings);
     };
-  }, [key, searchParams]);
+  }, [key, searchParams, widget]);
 
   useEffect(() => {
     const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://127.0.0.1:4000"}/overlay`);
@@ -381,6 +426,8 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
 
   const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, { ...alert, settings }) : "", [alert, settings]);
   const customCss = useMemo(() => alert ? fillTemplate(settings.widgetCss, alert) : "", [alert, settings.widgetCss]);
+  const goalHtml = useMemo(() => fillGoalTemplate(settings.donateGoal?.html, settings), [settings]);
+  const goalCss = useMemo(() => fillGoalTemplate(settings.donateGoal?.css, settings), [settings]);
 
   useEffect(() => {
     if (!alert || !settings.widgetJs || !widgetRef.current) return;
@@ -392,10 +439,28 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     }
   }, [alert, settings]);
 
+  useEffect(() => {
+    if (widget !== "goal" || !settings.donateGoal?.js || !widgetRef.current) return;
+    try {
+      const code = fillGoalTemplate(settings.donateGoal.js, settings);
+      new Function("root", "settings", code)(widgetRef.current, settings);
+    } catch {
+      // Custom goal JS should never break the overlay runtime.
+    }
+  }, [settings, widget]);
+
   return (
     <main className={`grid min-h-screen bg-transparent ${positionClass(settings.position)}`}>
+      {widget === "goal" && (
+        <section className="mx-auto grid max-w-5xl place-items-center gap-3 bg-transparent p-5 text-center">
+          <div ref={widgetRef} className="tiphouse-goal-widget">
+            <style dangerouslySetInnerHTML={{ __html: goalCss }} />
+            <div dangerouslySetInnerHTML={{ __html: goalHtml }} />
+          </div>
+        </section>
+      )}
       <AnimatePresence>
-        {alert && (
+        {widget === "alert" && alert && (
           <motion.section
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
