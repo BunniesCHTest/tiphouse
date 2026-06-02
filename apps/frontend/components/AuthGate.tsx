@@ -40,7 +40,7 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
       <main className="grid min-h-screen place-items-center px-4 text-center">
         <section className="card max-w-md p-6">
           <h1 className="text-3xl font-black">กรุณาเข้าสู่ระบบก่อน</h1>
-          <p className="mt-3 text-white/65">ต้องสมัครใช้งานหรือเข้าสู่ระบบก่อนถึงจะใช้หน้าจัดการของ TipHouse ได้</p>
+          <p className="mt-3 text-white/65">ต้องเข้าสู่ระบบผ่าน Streamlabs ก่อนถึงจะใช้หน้าจัดการของ TipHouse ได้</p>
           <div className="mt-5 flex justify-center gap-3">
             <Link className="btn btn-primary" href={admin ? "/control-admin/login" : "/login"}>Login</Link>
           </div>
