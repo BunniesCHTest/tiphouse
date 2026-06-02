@@ -13,18 +13,32 @@ export class BootstrapService implements OnApplicationBootstrap {
 
   private async ensureAdminUser() {
     const passwordHash = await argon2.hash("Abc@1234");
-    await this.prisma.user.upsert({
-      where: { username: "Test" },
-      update: {
-        role: UserRole.ADMIN,
-        accountStatus: "APPROVED",
-      },
-      create: {
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ username: "Test" }, { email: "admin@tiphouse.test" }] },
+      select: { id: true },
+    });
+    if (existing) {
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          username: "Test",
+          email: "admin@tiphouse.test",
+          passwordHash,
+          role: UserRole.ADMIN,
+          accountStatus: "APPROVED",
+          passwordMustChange: false,
+        },
+      });
+      return;
+    }
+    await this.prisma.user.create({
+      data: {
         username: "Test",
         email: "admin@tiphouse.test",
         passwordHash,
         role: UserRole.ADMIN,
         accountStatus: "APPROVED",
+        passwordMustChange: false,
       },
     });
   }
