@@ -15,6 +15,22 @@ type UserRow = {
   authProvider?: string;
   streamlabsUsername?: string | null;
   pendingEmail?: string | null;
+  payout?: {
+    accountName?: string | null;
+    legalName?: string | null;
+    phone?: string | null;
+    contactEmail?: string | null;
+    taxId?: string | null;
+    address?: string | null;
+    bankName?: string | null;
+    branchName?: string | null;
+    accountType?: string | null;
+    accountNumber?: string | null;
+    payoutMethod?: string | null;
+    promptpayType?: string | null;
+    promptpayId?: string | null;
+    kycStatus?: string | null;
+  } | null;
   page?: { slug: string; displayName: string; minAmount: number; goalAmount: number } | null;
   _count?: { donations: number; approvals: number };
 };
@@ -213,6 +229,13 @@ export default function AdminPage() {
     await loadUsers();
   }
 
+  async function resetPassword(user: UserRow) {
+    setCreatedPassword("");
+    const { data } = await api.post(`/admin/users/${user.id}/reset-password`, {}, { headers: authHeaders() });
+    setCreatedPassword(data.tempPassword);
+    setMessage(`Reset password ของ ${user.username} สำเร็จ`);
+  }
+
   async function showUserHistory(user: UserRow) {
     setSelectedUser(user);
     try {
@@ -272,6 +295,11 @@ export default function AdminPage() {
         </section>
         {createdPassword && <p className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-3 text-gold">Temporary password: <strong>{createdPassword}</strong></p>}
         {message && <p className="mt-4 text-mint">{message}</p>}
+        {message && (
+          <div className="fixed bottom-5 right-5 z-50 max-w-sm rounded-lg border border-mint/30 bg-ink p-4 font-bold text-mint shadow-2xl">
+            {message}
+          </div>
+        )}
 
         {active === "users" && canManageUsers && (
           <section className="card mt-5 overflow-auto p-4">
@@ -291,6 +319,7 @@ export default function AdminPage() {
                     <td className="flex gap-2 py-2">
                       <button className="btn" onClick={() => setSelectedUser(user)} type="button">แก้ไข</button>
                       <button className="btn" onClick={() => showUserHistory(user)} type="button">ประวัติ</button>
+                      {(user.role === "ADMIN" || user.role === "ACCOUNTING") && <button className="btn" onClick={() => resetPassword(user)} type="button">Reset Password</button>}
                     </td>
                   </tr>
                 ))}
@@ -385,6 +414,34 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="draft-panel">
+                <h3 className="text-xl font-black">ข้อมูลบัญชีโอนจ่าย</h3>
+                {selectedUser.payout ? (
+                  <dl className="mt-4 grid gap-3 md:grid-cols-2">
+                    {[
+                      ["ชื่อบัญชี", selectedUser.payout.accountName],
+                      ["ชื่อนิติ/ชื่อจริง", selectedUser.payout.legalName],
+                      ["เบอร์โทร", selectedUser.payout.phone],
+                      ["อีเมลติดต่อ", selectedUser.payout.contactEmail],
+                      ["เลขผู้เสียภาษี/บัตรประชาชน", selectedUser.payout.taxId],
+                      ["ธนาคาร", selectedUser.payout.bankName],
+                      ["สาขา", selectedUser.payout.branchName],
+                      ["ประเภทบัญชี", selectedUser.payout.accountType],
+                      ["เลขบัญชี", selectedUser.payout.accountNumber],
+                      ["วิธีโอนจ่าย", selectedUser.payout.payoutMethod],
+                      ["ประเภทพร้อมเพย์", selectedUser.payout.promptpayType],
+                      ["พร้อมเพย์", selectedUser.payout.promptpayId],
+                      ["สถานะ KYC", selectedUser.payout.kycStatus],
+                      ["ที่อยู่", selectedUser.payout.address],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                        <dt className="text-sm text-white/55">{label}</dt>
+                        <dd className="mt-1 font-bold">{value || "-"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : <p className="mt-3 text-white/55">ยังไม่มีข้อมูลบัญชีโอนจ่ายของ User นี้</p>}
               </div>
             </section>
           </div>

@@ -171,6 +171,15 @@ select.input option {
   color: var(--app-text);
 }
 
+:root[data-theme="light"] .home-lead {
+  color: #061724 !important;
+}
+
+:root[data-theme="light"] .home-lead::selection {
+  background: rgba(6, 23, 36, 0.16);
+  color: #061724;
+}
+
 :root[data-theme="light"] .input {
   background: #ffffff;
   color: var(--app-text);

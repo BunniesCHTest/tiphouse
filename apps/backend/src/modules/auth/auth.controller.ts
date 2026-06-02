@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { AuthService } from "./auth.service";
-import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
+import { ChangePasswordDto, ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
 @Controller("auth")
 export class AuthController {
@@ -27,6 +27,12 @@ export class AuthController {
   @Post("password-reset/confirm")
   confirmPasswordReset(@Body() dto: ConfirmPasswordResetDto) {
     return this.auth.confirmPasswordReset(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("change-password")
+  changePassword(@CurrentUser() user: JwtUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user.sub, dto);
   }
 
   @Get("streamlabs")

@@ -57,3 +57,20 @@ export class ConfirmPasswordResetDto {
   })
   password!: string;
 }
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(8)
+  oldPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, {
+    message: "Password must be at least 8 characters and include uppercase, number, and special character",
+  })
+  newPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  confirmPassword!: string;
+}

@@ -5,13 +5,53 @@ export class UpsertPayoutDto {
   accountName!: string;
 
   @IsString()
+  @IsOptional()
+  legalName?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  contactEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  taxId?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsString()
   bankName!: string;
+
+  @IsString()
+  @IsOptional()
+  branchName?: string;
+
+  @IsString()
+  @IsOptional()
+  accountType?: string;
 
   @IsString()
   accountNumber!: string;
 
   @IsString()
+  @IsOptional()
+  payoutMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  promptpayType?: string;
+
+  @IsString()
   promptpayId!: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
 }
 
 export class UpdateOverlayDto {

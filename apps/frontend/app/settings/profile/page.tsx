@@ -8,7 +8,6 @@ import { api, authHeaders } from "@/lib/api";
 type Profile = {
   username: string;
   email: string;
-  pendingEmail?: string | null;
   accountStatus: string;
   role: string;
 };
@@ -41,7 +40,7 @@ export default function ProfileSettingsPage() {
       );
       setProfile(data);
       if (data?.accountStatus) localStorage.setItem("tiphouse_account_status", data.accountStatus);
-      setMessage("บันทึกข้อมูลแล้ว หากเปลี่ยนอีเมลต้องรอ Admin อนุมัติก่อนจึงจะใช้อีเมลใหม่ได้");
+      setMessage("บันทึกโปรไฟล์สำเร็จ");
     } catch {
       setError("บันทึกข้อมูลไม่สำเร็จ กรุณาตรวจสอบข้อมูลซ้ำ");
     }
@@ -54,14 +53,10 @@ export default function ProfileSettingsPage() {
         <p className="font-bold text-mint">Account Profile</p>
         <h1 className="mt-3 text-5xl font-black">จัดการโปรไฟล์</h1>
         <section className="card mt-8 p-5">
-          <div className="mb-5 flex flex-wrap gap-3 text-sm">
-            <span className="badge">สถานะบัญชี: {profile?.accountStatus ?? "Loading"}</span>
-            {profile?.pendingEmail && <span className="badge">รออนุมัติอีเมลใหม่: {profile.pendingEmail}</span>}
-          </div>
           {profile && (
             <form onSubmit={save} className="grid gap-4">
               <label>Username<input className="input mt-2" name="username" defaultValue={profile.username} required /></label>
-              <label>Email<input className="input mt-2" name="email" type="email" defaultValue={profile.email} required /></label>
+              <label>Email<input className="input mt-2" name="email" type="email" defaultValue={profile.email} required /><span className="mt-2 block text-sm text-white/60">ใช้รับการติดต่อจาก TipHouse เท่านั้น</span></label>
               {message && <p className="text-mint">{message}</p>}
               {error && <p className="text-coral">{error}</p>}
               <button className="btn btn-primary" type="submit">บันทึกโปรไฟล์</button>

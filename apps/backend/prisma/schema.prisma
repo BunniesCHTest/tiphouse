@@ -54,6 +54,7 @@ model User {
   accountStatus AccountStatus @default(PENDING)
   pendingEmail String?
   twoFaSecret  String?
+  passwordMustChange Boolean @default(false)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   page         DonationPage?
@@ -153,9 +154,19 @@ model PayoutAccount {
   id            String   @id @default(uuid())
   userId        String   @unique
   accountName   String
+  legalName     String?
+  phone         String?
+  contactEmail  String?
+  taxId         String?
+  address       String?
   bankName      String
+  branchName    String?
+  accountType   String?
   accountNumber String
+  payoutMethod  String   @default("BANK_TRANSFER")
+  promptpayType String?
   promptpayId   String
+  note          String?
   kycStatus     String   @default("PENDING")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

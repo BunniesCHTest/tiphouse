@@ -23,9 +23,9 @@ export default function HomePage() {
           <div>
             <p className="mb-4 font-bold text-mint">Realtime Donate Platform for Streamers</p>
             <h1 className="text-6xl font-extrabold leading-none md:text-8xl">TipHouse</h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75">
+            <p className="home-lead mt-6 max-w-3xl text-lg leading-8 text-white/75">
               {t(
-                "ระบบรับโดเนท production-ready พร้อม Streamlabs Login, PostgreSQL, payment webhook, realtime OBS overlay, dashboard และ admin audit สำหรับนำขึ้นใช้งานจริง",
+                "ระบบรับโดเนท production-ready พร้อม Streamlabs Login, PostgreSQL, payment webhook, realtime OBS overlay, dashboard และ admin audit สำหรับใช้งานจริง",
                 "A production-ready donation platform with Streamlabs Login, PostgreSQL, payment webhooks, realtime OBS overlays, dashboards, and admin audit tools.",
               )}
             </p>

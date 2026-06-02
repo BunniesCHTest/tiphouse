@@ -1,6 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import * as argon2 from "argon2";
-import { randomBytes } from "crypto";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -127,13 +126,14 @@ export class AdminController {
     const role = String(body.role ?? "ADMIN").toUpperCase();
     if (!username || !email) throw new ForbiddenException("username and email are required");
     if (!["ADMIN", "ACCOUNTING"].includes(role)) throw new ForbiddenException("role must be ADMIN or ACCOUNTING");
-    const tempPassword = String(body.password ?? randomBytes(6).toString("base64url"));
+    const tempPassword = "Abc@1234";
     const created = await this.prisma.user.create({
       data: {
         username,
         email,
         role: role as any,
         accountStatus: "APPROVED",
+        passwordMustChange: true,
         passwordHash: await argon2.hash(tempPassword),
       },
       select: { id: true, username: true, email: true, role: true, accountStatus: true, createdAt: true },
@@ -142,6 +142,27 @@ export class AdminController {
       data: { adminId: admin.sub, action: "CREATE_STAFF_USER", targetId: created.id, metadata: { role } },
     });
     return { user: created, tempPassword };
+  }
+
+  @Post("users/:id/reset-password")
+  async resetStaffPassword(@CurrentUser() admin: JwtUser, @Param("id") id: string) {
+    this.requireAdmin(admin);
+    const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
+    if (target.role !== "ADMIN" && target.role !== "ACCOUNTING") {
+      throw new ForbiddenException("Only ADMIN and ACCOUNTING passwords can be reset here");
+    }
+    const tempPassword = "Abc@1234";
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash: await argon2.hash(tempPassword),
+        passwordMustChange: true,
+      },
+    });
+    await this.prisma.adminLog.create({
+      data: { adminId: admin.sub, action: "RESET_STAFF_PASSWORD", targetId: id },
+    });
+    return { ok: true, tempPassword };
   }
 
   @Get("approvals")

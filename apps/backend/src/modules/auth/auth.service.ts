@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
@@ -6,7 +6,7 @@ import * as argon2 from "argon2";
 import type { Response } from "express";
 import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
+import { ChangePasswordDto, ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
 type StreamlabsTokenResponse = {
   access_token: string;
@@ -73,9 +73,27 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
     return {
-      user: { id: user.id, email: user.email, username: user.username, role: user.role, accountStatus: user.accountStatus },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role, accountStatus: user.accountStatus, passwordMustChange: user.passwordMustChange },
       tokens: await this.signTokens(user.id, user.email, user.role),
     };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException("New password and confirmation do not match");
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!(await argon2.verify(user.passwordHash, dto.oldPassword))) {
+      throw new UnauthorizedException("Old password is incorrect");
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await argon2.hash(dto.newPassword),
+        passwordMustChange: false,
+      },
+    });
+    return { ok: true };
   }
 
   streamlabsLoginUrl(userId?: string) {
@@ -165,7 +183,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: reset.userId },
-        data: { passwordHash: await argon2.hash(dto.password) },
+        data: { passwordHash: await argon2.hash(dto.password), passwordMustChange: false },
       }),
       this.prisma.passwordResetToken.update({ where: { id: reset.id }, data: { usedAt: new Date() } }),
     ]);

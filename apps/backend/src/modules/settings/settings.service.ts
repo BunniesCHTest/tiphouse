@@ -29,10 +29,8 @@ export class SettingsService {
     const data: any = {};
     if (dto.username && dto.username !== current.username) data.username = dto.username;
     if (dto.email && dto.email !== current.email) {
-      data.pendingEmail = dto.email;
-      await this.prisma.approvalRequest.create({
-        data: { userId, type: "EMAIL_CHANGE", requestedEmail: dto.email, note: "Email change request" },
-      });
+      data.email = dto.email;
+      data.pendingEmail = null;
     }
     if (Object.keys(data).length) {
       await this.prisma.user.update({ where: { id: userId }, data });

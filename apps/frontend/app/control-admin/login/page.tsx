@@ -28,7 +28,7 @@ export default function AdminLoginPage() {
       localStorage.setItem("tiphouse_user_id", data.user.id);
       localStorage.setItem("tiphouse_role", data.user.role);
       localStorage.setItem("tiphouse_account_status", data.user.accountStatus);
-      router.push("/control-admin");
+      router.push(data.user.passwordMustChange ? "/control-admin/change-password" : "/control-admin");
     } catch {
       if (isLocalhost() && form.get("username") === "Test" && form.get("password") === "Abc@1234") {
         localStorage.setItem("tiphouse_access_token", "local-admin-token");
