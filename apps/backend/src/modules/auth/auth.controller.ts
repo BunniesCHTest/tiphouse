@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
+import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
+import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { AuthService } from "./auth.service";
 import { ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
@@ -32,8 +34,14 @@ export class AuthController {
     return this.auth.streamlabsLoginUrl();
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get("streamlabs/connect")
+  streamlabsConnect(@CurrentUser() user: JwtUser) {
+    return this.auth.streamlabsLoginUrl(user.sub);
+  }
+
   @Get("streamlabs/callback")
-  streamlabsCallback(@Query("code") code: string, @Res() res: Response) {
-    return this.auth.streamlabsCallback(code, res);
+  streamlabsCallback(@Query("code") code: string, @Query("state") state: string | undefined, @Res() res: Response) {
+    return this.auth.streamlabsCallback(code, state, res);
   }
 }

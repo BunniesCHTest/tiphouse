@@ -20,6 +20,24 @@ type QrState = {
   transactionRef: string;
 };
 
+type RecentDonation = {
+  donorName: string;
+  amount: number;
+  message: string;
+  anonymous: boolean;
+  paidAt?: string | null;
+};
+
+type DonorRank = {
+  donorName: string;
+  amount: number;
+  count: number;
+  anonymous: boolean;
+};
+
+const THAI_ANONYMOUS = "บุคคลนิรนาม";
+const quickAmounts = [50, 100, 300, 500, 1000];
+
 const defaultPage: PageData = {
   slug: "bunniesch",
   displayName: "Bunnie SCH",
@@ -41,6 +59,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [formState, setFormState] = useState({ donorName: "", message: "", amount: "", anonymous: false });
+  const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
+  const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
 
   useEffect(() => {
     api.get(`/page/${slug}`).then((res) => {
@@ -54,6 +74,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setPage(null);
       setError("ไม่พบหน้าโดเนทนี้ หรือ backend ยังไม่พร้อม");
     });
+    api.get(`/donations/latest/${slug}`).then((res) => setRecentDonations(res.data ?? [])).catch(() => setRecentDonations([]));
+    api.get(`/donations/rank/${slug}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
   }, [slug]);
 
   const amountNumber = Number(formState.amount || 0);
@@ -106,9 +128,17 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     setSuccess(false);
   }
 
+  function toggleAnonymous() {
+    setFormState((current) => ({
+      ...current,
+      anonymous: !current.anonymous,
+      donorName: !current.anonymous ? "" : current.donorName,
+    }));
+  }
+
   function completePaymentCheck() {
     triggerOverlay({
-      donorName: formState.anonymous ? "Anonymous" : formState.donorName,
+      donorName: formState.anonymous ? THAI_ANONYMOUS : formState.donorName,
       amount: amountNumber,
       message: formState.message || "Thank you!",
       anonymous: formState.anonymous,
@@ -147,14 +177,38 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       <section className="mx-auto grid w-[min(1100px,calc(100%-2rem))] gap-5 py-8 lg:grid-cols-[1fr_.75fr]">
         {!qr ? (
           <form onSubmit={donate} className="card grid gap-4 p-5">
-            <label>ชื่อผู้โดเนท<input className="input mt-2 disabled:cursor-not-allowed disabled:opacity-50" name="donorName" value={formState.anonymous ? "" : formState.donorName} onChange={(event) => setFormState({ ...formState, donorName: event.target.value })} placeholder={formState.anonymous ? "บุคคลนิรนาม" : ""} disabled={formState.anonymous} required={!formState.anonymous} /></label>
+            <label>
+              ชื่อผู้โดเนท
+              <input
+                className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
+                name="donorName"
+                value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
+                onChange={(event) => setFormState({ ...formState, donorName: event.target.value })}
+                disabled={formState.anonymous}
+                required={!formState.anonymous}
+              />
+            </label>
+            <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
+              แสดงเป็น Anonymous
+            </button>
             <label>ข้อความ<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
             <label>
               จำนวนเงิน
               <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
               {amountTooLow && <span className="mt-2 block font-bold text-coral">ยอดโดเนทต้องไม่น้อยกว่า ฿{page.minAmount}</span>}
             </label>
-            <label className="flex gap-2 text-white/70"><input name="anonymous" type="checkbox" checked={formState.anonymous} onChange={(event) => setFormState({ ...formState, anonymous: event.target.checked, donorName: event.target.checked ? "" : formState.donorName })} /> แสดงเป็น Anonymous</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {quickAmounts.map((amount) => (
+                <button
+                  key={amount}
+                  className={`btn ${amountNumber === amount ? "btn-primary" : ""}`}
+                  type="button"
+                  onClick={() => setFormState({ ...formState, amount: String(amount) })}
+                >
+                  ฿{amount.toLocaleString("th-TH")}
+                </button>
+              ))}
+            </div>
             {error && <p className="text-coral">{error}</p>}
             <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>ดำเนินการโดเนท</button>
           </form>
@@ -173,6 +227,31 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         <aside className="card grid content-start gap-4 p-5">
           <h2 className="text-2xl font-black">Donation Detail</h2>
           <p className="text-white/60">QR code จะแสดงหลังจากกรอกข้อมูลครบและกด “ดำเนินการโดเนท” เท่านั้น</p>
+          <div className="border-t border-white/10 pt-4">
+            <h3 className="text-xl font-black">Recent Donations</h3>
+            <div className="mt-3 grid gap-3">
+              {recentDonations.length ? recentDonations.map((item, index) => (
+                <div key={`${item.paidAt ?? index}-${item.amount}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <strong>{item.anonymous ? THAI_ANONYMOUS : item.donorName}</strong>
+                    <span className="font-black text-mint">฿{item.amount.toLocaleString("th-TH")}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-white/55">{item.message}</p>
+                </div>
+              )) : <p className="text-sm text-white/45">ยังไม่มีรายการโดเนทล่าสุด</p>}
+            </div>
+          </div>
+          <div className="border-t border-white/10 pt-4">
+            <h3 className="text-xl font-black">Top Supporters</h3>
+            <div className="mt-3 grid gap-2">
+              {donorRank.length ? donorRank.map((item, index) => (
+                <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <span>{index + 1}. {item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
+                  <strong className="text-mint">฿{item.amount.toLocaleString("th-TH")}</strong>
+                </div>
+              )) : <p className="text-sm text-white/45">ยังไม่มีอันดับผู้โดเนท</p>}
+            </div>
+          </div>
         </aside>
       </section>
     </main>

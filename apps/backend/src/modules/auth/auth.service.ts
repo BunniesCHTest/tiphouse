@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
@@ -16,9 +16,15 @@ type StreamlabsTokenResponse = {
 };
 
 type StreamlabsUserResponse = Record<string, any>;
+type StreamlabsOAuthState = {
+  mode: "login" | "connect";
+  userId?: string;
+};
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -72,27 +78,35 @@ export class AuthService {
     };
   }
 
-  streamlabsLoginUrl() {
+  streamlabsLoginUrl(userId?: string) {
     const clientId = this.config.get<string>("STREAMLABS_CLIENT_ID");
     const redirectUri = this.config.get<string>("STREAMLABS_REDIRECT_URI");
     if (!clientId || !redirectUri) {
       return { configured: false, url: null, message: "Streamlabs OAuth is not configured" };
     }
+    const state = this.signStreamlabsState(userId ? { mode: "connect", userId } : { mode: "login" });
     const url = new URL("https://streamlabs.com/api/v2.0/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "donations.create donations.read alerts.create socket.token");
-    url.searchParams.set("state", randomBytes(16).toString("hex"));
+    url.searchParams.set("state", state);
     return { configured: true, url: url.toString() };
   }
 
-  async streamlabsCallback(code: string, res: Response) {
+  async streamlabsCallback(code: string, state: string | undefined, res: Response) {
     const frontendUrl = this.config.get<string>("FRONTEND_URL", "http://127.0.0.1:3000");
     try {
       if (!code) throw new UnauthorizedException("Missing Streamlabs authorization code");
+      const oauthState = await this.verifyStreamlabsState(state);
       const token = await this.exchangeStreamlabsCode(code);
       const streamlabsUser = await this.fetchStreamlabsUser(token.access_token);
+      if (oauthState.mode === "connect" && oauthState.userId) {
+        await this.connectStreamlabsToUser(oauthState.userId, streamlabsUser, token);
+        const redirect = new URL("/settings/overlay", frontendUrl);
+        redirect.searchParams.set("streamlabs", "connected");
+        return res.redirect(redirect.toString());
+      }
       const user = await this.upsertStreamlabsUser(streamlabsUser, token);
       const tokens = await this.signTokens(user.id, user.email, user.role);
       const redirect = new URL("/streamlabs/callback", frontendUrl);
@@ -105,9 +119,12 @@ export class AuthService {
         accountStatus: user.accountStatus,
       }).toString();
       return res.redirect(redirect.toString());
-    } catch {
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Streamlabs login failed";
+      this.logger.error(`Streamlabs OAuth callback failed: ${reason}`);
       const redirect = new URL("/login", frontendUrl);
       redirect.searchParams.set("streamlabs", "failed");
+      redirect.searchParams.set("reason", this.publicStreamlabsError(reason));
       return res.redirect(redirect.toString());
     }
   }
@@ -164,7 +181,10 @@ export class AuthService {
         code,
       }),
     });
-    if (!response.ok) throw new UnauthorizedException("Streamlabs token exchange failed");
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new UnauthorizedException(`Streamlabs token exchange failed (${response.status}) ${body.slice(0, 180)}`);
+    }
     return response.json() as Promise<StreamlabsTokenResponse>;
   }
 
@@ -176,7 +196,10 @@ export class AuthService {
         "X-Requested-With": "XMLHttpRequest",
       },
     });
-    if (!response.ok) throw new UnauthorizedException("Streamlabs user lookup failed");
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new UnauthorizedException(`Streamlabs user lookup failed (${response.status}) ${body.slice(0, 180)}`);
+    }
     return response.json() as Promise<StreamlabsUserResponse>;
   }
 
@@ -186,26 +209,13 @@ export class AuthService {
     const usernameBase = this.slugify(String(streamlabsUser.username ?? displayName ?? `streamlabs-${streamlabsId}`));
     const email = this.extractEmail(streamlabsUser) ?? `streamlabs-${streamlabsId}@tiphouse.local`;
     const existing = await this.findStreamlabsUser(streamlabsId, email);
-    const streamlabsTheme = (currentTheme: unknown) => this.cleanJson({
-      ...(typeof currentTheme === "object" && currentTheme ? currentTheme : {}),
-      streamlabs: this.cleanJson({
-        connected: true,
-        alertBoxEnabled: true,
-        userId: streamlabsId,
-        username: displayName,
-        accessToken: token.access_token,
-        refreshToken: token.refresh_token,
-        tokenType: token.token_type ?? "Bearer",
-        connectedAt: new Date().toISOString(),
-      }),
-    });
 
     if (existing) {
       const overlay = existing.overlay;
       await this.prisma.overlaySetting.upsert({
         where: { userId: existing.id },
-        update: { theme: streamlabsTheme(overlay?.theme) as Prisma.InputJsonValue },
-        create: { userId: existing.id, theme: streamlabsTheme({}) as Prisma.InputJsonValue, animation: { position: "Center", durationSeconds: 7 } },
+        update: { theme: this.streamlabsTheme(streamlabsUser, token, overlay?.theme) as Prisma.InputJsonValue },
+        create: { userId: existing.id, theme: this.streamlabsTheme(streamlabsUser, token, {}) as Prisma.InputJsonValue, animation: { position: "Center", durationSeconds: 7 } },
       });
       return this.prisma.user.findUniqueOrThrow({ where: { id: existing.id } });
     }
@@ -228,10 +238,43 @@ export class AuthService {
         },
         overlay: {
           create: {
-            theme: streamlabsTheme({}),
+            theme: this.streamlabsTheme(streamlabsUser, token, {}),
             animation: { position: "Center", durationSeconds: 7 },
           },
         },
+      },
+    });
+  }
+
+  private async connectStreamlabsToUser(userId: string, streamlabsUser: StreamlabsUserResponse, token: StreamlabsTokenResponse) {
+    const current = await this.prisma.overlaySetting.findUnique({ where: { userId } });
+    await this.prisma.overlaySetting.upsert({
+      where: { userId },
+      update: { theme: this.streamlabsTheme(streamlabsUser, token, current?.theme) as Prisma.InputJsonValue },
+      create: {
+        userId,
+        theme: this.streamlabsTheme(streamlabsUser, token, {}) as Prisma.InputJsonValue,
+        animation: { position: "Center", durationSeconds: 7 },
+      },
+    });
+  }
+
+  private streamlabsTheme(streamlabsUser: StreamlabsUserResponse, token: StreamlabsTokenResponse, currentTheme: unknown) {
+    const current = typeof currentTheme === "object" && currentTheme ? currentTheme as Record<string, any> : {};
+    const streamlabsId = String(streamlabsUser.id ?? streamlabsUser.streamlabs?.id ?? streamlabsUser.user?.id ?? streamlabsUser.username ?? streamlabsUser.display_name ?? "unknown");
+    const displayName = String(streamlabsUser.display_name ?? streamlabsUser.name ?? streamlabsUser.username ?? streamlabsUser.channel ?? `streamlabs-${streamlabsId}`);
+    return this.cleanJson({
+      ...current,
+      streamlabs: {
+        ...(typeof current.streamlabs === "object" && current.streamlabs ? current.streamlabs : {}),
+        connected: true,
+        alertBoxEnabled: true,
+        userId: streamlabsId,
+        username: displayName,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token,
+        tokenType: token.token_type ?? "Bearer",
+        connectedAt: new Date().toISOString(),
       },
     });
   }
@@ -279,6 +322,25 @@ export class AuthService {
     return JSON.parse(JSON.stringify(value)) as T;
   }
 
+  private signStreamlabsState(state: StreamlabsOAuthState) {
+    return this.jwt.sign(state, {
+      secret: this.config.getOrThrow<string>("JWT_ACCESS_SECRET"),
+      expiresIn: "10m",
+    });
+  }
+
+  private async verifyStreamlabsState(state?: string): Promise<StreamlabsOAuthState> {
+    if (!state) return { mode: "login" };
+    try {
+      const decoded = await this.jwt.verifyAsync<StreamlabsOAuthState>(state, {
+        secret: this.config.getOrThrow<string>("JWT_ACCESS_SECRET"),
+      });
+      return decoded.mode === "connect" && decoded.userId ? { mode: "connect", userId: decoded.userId } : { mode: "login" };
+    } catch {
+      throw new UnauthorizedException("Invalid Streamlabs OAuth state");
+    }
+  }
+
   private async signTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
     const [accessToken, refreshToken] = await Promise.all([
@@ -296,5 +358,13 @@ export class AuthService {
 
   private hashResetToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private publicStreamlabsError(reason: string) {
+    if (reason.includes("token exchange")) return "token_exchange";
+    if (reason.includes("user lookup")) return "user_lookup";
+    if (reason.includes("state")) return "invalid_state";
+    if (reason.includes("authorization code")) return "missing_code";
+    return "unknown";
   }
 }

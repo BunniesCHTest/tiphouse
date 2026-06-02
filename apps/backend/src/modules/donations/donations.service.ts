@@ -41,6 +41,30 @@ export class DonationsService {
     });
   }
 
+  async rank(slug: string) {
+    const page = await this.prisma.donationPage.findUnique({ where: { slug } });
+    if (!page) throw new NotFoundException("Donation page not found");
+    const rows = await this.prisma.donation.groupBy({
+      by: ["donorName", "anonymous"],
+      where: { pageId: page.id, paymentStatus: DonationStatus.PAID },
+      _sum: { amount: true },
+      _count: { _all: true },
+      orderBy: { _sum: { amount: "desc" } },
+      take: 30,
+    });
+    const totals = new Map<string, { donorName: string; amount: number; count: number; anonymous: boolean }>();
+    for (const row of rows) {
+      const anonymous = row.anonymous;
+      const donorName = anonymous ? "บุคคลนิรนาม" : row.donorName;
+      const current = totals.get(donorName) ?? { donorName, amount: 0, count: 0, anonymous };
+      current.amount += row._sum.amount ?? 0;
+      current.count += row._count._all;
+      current.anonymous = current.anonymous || anonymous;
+      totals.set(donorName, current);
+    }
+    return [...totals.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+  }
+
   async createPending(dto: CreateDonationDto, meta: { ipAddress?: string; userAgent?: string }) {
     const page = await this.prisma.donationPage.findUnique({ where: { slug: dto.pageSlug }, include: { user: true } });
     if (!page) throw new NotFoundException("Donation page not found");

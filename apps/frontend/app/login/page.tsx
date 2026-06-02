@@ -1,15 +1,29 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Nav } from "@/components/Nav";
 import { api } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [streamlabsMessage, setStreamlabsMessage] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("streamlabs") !== "failed") return;
+    const reason = searchParams.get("reason") ?? "unknown";
+    const messages: Record<string, string> = {
+      token_exchange: "Streamlabs login ไม่สำเร็จ: ตรวจสอบ STREAMLABS_CLIENT_ID, STREAMLABS_CLIENT_SECRET และ Redirect URI ให้ตรงกับ Streamlabs App",
+      user_lookup: "Streamlabs login ไม่สำเร็จ: ได้ token แล้วแต่ดึงข้อมูลบัญชีไม่ได้ กรุณาตรวจ scope และสิทธิ์ของแอป",
+      invalid_state: "Streamlabs login ไม่สำเร็จ: session สำหรับ OAuth หมดอายุ กรุณาลอง Login ใหม่",
+      missing_code: "Streamlabs login ไม่สำเร็จ: Streamlabs ไม่ส่ง authorization code กลับมา",
+      unknown: "Streamlabs login ไม่สำเร็จ กรุณาตรวจ backend logs และค่า env ของ Streamlabs",
+    };
+    setStreamlabsMessage(messages[reason] ?? messages.unknown);
+  }, [searchParams]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,12 +42,16 @@ export default function LoginPage() {
   }
 
   async function streamlabsLogin() {
-    const { data } = await api.get("/auth/streamlabs");
-    if (data.configured && data.url) {
-      window.location.href = data.url;
-      return;
+    try {
+      const { data } = await api.get("/auth/streamlabs");
+      if (data.configured && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setStreamlabsMessage("ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production");
+    } catch {
+      setStreamlabsMessage("เชื่อมต่อ backend เพื่อเริ่ม Streamlabs login ไม่สำเร็จ");
     }
-    setStreamlabsMessage("ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production");
   }
 
   return (
@@ -53,5 +71,13 @@ export default function LoginPage() {
         </form>
       </main>
     </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="grid min-h-screen place-items-center">Loading...</main>}>
+      <LoginContent />
+    </Suspense>
   );
 }

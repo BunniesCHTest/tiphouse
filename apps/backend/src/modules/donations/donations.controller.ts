@@ -18,6 +18,11 @@ export class DonationsController {
     return this.donations.latest(slug);
   }
 
+  @Get("donations/rank/:slug")
+  rank(@Param("slug") slug: string) {
+    return this.donations.rank(slug);
+  }
+
   @Post("donate")
   create(@Body() dto: CreateDonationDto, @Req() req: any) {
     return this.donations.createPending(dto, {

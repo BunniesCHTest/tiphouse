@@ -208,6 +208,11 @@ export default function OverlaySettingsPage() {
   const previewSrcDoc = useMemo(() => previewDoc(settings, previewAlert), [settings, previewAlert]);
 
   useEffect(() => {
+    if (window.location.search.includes("streamlabs=connected")) {
+      setNotice("เชื่อมต่อ Streamlabs สำเร็จ");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
     const cached = localStorage.getItem(userCacheKey("overlay_settings"));
     if (cached) setSettings(normalizeOverlay(JSON.parse(cached)));
 
@@ -259,6 +264,21 @@ export default function OverlaySettingsPage() {
     }, { headers: authHeaders() }).catch(() => undefined);
   }
 
+  async function connectStreamlabs() {
+    setError("");
+    setNotice("");
+    try {
+      const { data } = await api.get("/auth/streamlabs/connect", { headers: authHeaders() });
+      if (!data?.configured || !data?.url) {
+        setError("ยังไม่ได้ตั้งค่า Streamlabs OAuth ใน backend");
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("เริ่มเชื่อมต่อ Streamlabs ไม่สำเร็จ กรุณา Login ใหม่");
+    }
+  }
+
   return (
     <AuthGate>
       <Nav />
@@ -276,6 +296,7 @@ export default function OverlaySettingsPage() {
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
             <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Streamlabs Alert Box สำหรับ Tips/Variation</label>
+            <button className="btn" type="button" onClick={connectStreamlabs}>{settings.streamlabsConnected ? "เชื่อมต่อ Streamlabs ใหม่" : "เชื่อมต่อ Streamlabs"}</button>
             <p className="text-sm text-white/55">{settings.streamlabsConnected ? `เชื่อมต่อ Streamlabs แล้ว: ${settings.streamlabsUsername ?? "Streamlabs"}` : "ยังไม่ได้ Login ผ่าน Streamlabs จึงยังเปิดใช้งาน Alert Box Variation ไม่ได้"}</p>
             <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" name="widgetHtml" value={settings.widgetHtml} onChange={(event) => setSettings({ ...settings, widgetHtml: event.target.value })} /></label>
             <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" name="widgetCss" value={settings.widgetCss} onChange={(event) => setSettings({ ...settings, widgetCss: event.target.value })} /></label>
