@@ -69,7 +69,6 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
       </Link>
       <nav className="flex flex-wrap gap-2 text-sm text-white/70">
         {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/">{t("หน้าแรก", "Home")}</Link>}
-        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/register">{t("สมัครใช้งาน", "Register")}</Link>}
         {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">{t("หน้าโดเนท", "Donation Page")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}

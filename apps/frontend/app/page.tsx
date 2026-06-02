@@ -10,12 +10,6 @@ const features = [
   { title: "Viewer UX", text: "ผู้โดเนทใช้งานได้ง่าย เลือก Anonymous ได้ และดูรายการ/อันดับผู้สนับสนุนล่าสุด" },
 ];
 
-const previewDonations = [
-  { name: "PandaChan", amount: 100, message: "สู้ ๆ นะครับ ไลฟ์สนุกมาก!" },
-  { name: "บุคคลนิรนาม", amount: 300, message: "เป็นกำลังใจให้นะ" },
-  { name: "NightOwl", amount: 500, message: "Alert test พร้อม OBS" },
-];
-
 export default function HomePage() {
   return (
     <>
@@ -30,8 +24,7 @@ export default function HomePage() {
               realtime OBS overlay, dashboard และ admin audit สำหรับนำขึ้นใช้งานจริง
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="btn btn-primary" href="/register">เริ่มต้นใช้งาน</Link>
-              <Link className="btn" href="/login">Login Creator</Link>
+              <Link className="btn btn-primary" href="/login">เริ่มต้นใช้งานด้วย Streamlabs</Link>
             </div>
           </div>
           <section className="card overflow-hidden">
@@ -42,19 +35,10 @@ export default function HomePage() {
                   <h2 className="mt-4 text-3xl font-black">TipHouse</h2>
                   <p className="text-white/65">@tiphouse</p>
                 </div>
-                <span className="badge">OBS Ready</span>
               </div>
             </div>
-            <div className="grid gap-3 p-5">
-              {previewDonations.map((item) => (
-                <div key={`${item.name}-${item.amount}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <strong>{item.name}</strong>
-                    <span className="font-black text-mint">฿{item.amount.toLocaleString("th-TH")}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-white/55">{item.message}</p>
-                </div>
-              ))}
+            <div className="grid gap-3 p-5 text-white/65">
+              <p>เชื่อมต่อ Streamlabs เพื่อเริ่มจัดการหน้าโดเนท, Overlay และ Donate Goal สำหรับ OBS ได้ในที่เดียว</p>
             </div>
           </section>
         </section>

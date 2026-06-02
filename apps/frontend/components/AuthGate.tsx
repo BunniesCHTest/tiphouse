@@ -43,7 +43,6 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
           <p className="mt-3 text-white/65">ต้องสมัครใช้งานหรือเข้าสู่ระบบก่อนถึงจะใช้หน้าจัดการของ TipHouse ได้</p>
           <div className="mt-5 flex justify-center gap-3">
             <Link className="btn btn-primary" href={admin ? "/control-admin/login" : "/login"}>Login</Link>
-            {!admin && <Link className="btn" href="/register">สมัครใช้งาน</Link>}
           </div>
         </section>
       </main>

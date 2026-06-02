@@ -1,15 +1,12 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Nav } from "@/components/Nav";
 import { api } from "@/lib/api";
-import { saveSession } from "@/lib/session";
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState("");
   const [streamlabsMessage, setStreamlabsMessage] = useState("");
 
   useEffect(() => {
@@ -24,22 +21,6 @@ function LoginContent() {
     };
     setStreamlabsMessage(messages[reason] ?? messages.unknown);
   }, [searchParams]);
-
-  async function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    const form = new FormData(event.currentTarget);
-    try {
-      const { data } = await api.post("/auth/login", {
-        email: form.get("email"),
-        password: form.get("password"),
-      });
-      saveSession(data.user, data.tokens.accessToken);
-      router.push(data.user.accountStatus === "APPROVED" ? "/dashboard" : "/settings/profile");
-    } catch {
-      setError("เข้าสู่ระบบไม่สำเร็จ");
-    }
-  }
 
   async function streamlabsLogin() {
     try {
@@ -60,16 +41,12 @@ function LoginContent() {
       <Nav publicOnly />
       <main className="mx-auto w-[min(760px,calc(100%-2rem))] py-10">
         <p className="font-bold text-mint">Creator Login</p>
-        <h1 className="mt-3 text-5xl font-black">เข้าสู่ระบบ TipHouse</h1>
-        <form onSubmit={login} className="card mt-8 grid gap-4 p-5">
-          <label>Email<input className="input mt-2" name="email" type="email" placeholder="creator@tiphouse.test" required /></label>
-          <label>Password<input className="input mt-2" name="password" type="password" placeholder="password123" required /></label>
-          {error && <p className="text-coral">{error}</p>}
-          <button className="btn btn-primary" type="submit">Login</button>
-          <a className="btn text-center" href="/forgot-password">ลืมรหัสผ่าน / Reset Password</a>
-          <button className="btn" type="button" onClick={streamlabsLogin}>Login ผ่าน Streamlabs</button>
+        <h1 className="mt-3 text-5xl font-black">เข้าสู่ระบบด้วย Streamlabs</h1>
+        <section className="card mt-8 grid gap-4 p-5">
+          <p className="leading-7 text-white/65">TipHouse ใช้ Streamlabs Login สำหรับ Creator เท่านั้น เพื่อเชื่อม Alert Box, Tips และ Variation จากบัญชี Streamlabs ของคุณ</p>
+          <button className="btn btn-primary" type="button" onClick={streamlabsLogin}>Login ผ่าน Streamlabs</button>
           {streamlabsMessage && <p className="text-gold">{streamlabsMessage}</p>}
-        </form>
+        </section>
       </main>
     </>
   );
