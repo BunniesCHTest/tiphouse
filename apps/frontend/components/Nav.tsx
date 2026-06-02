@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, authHeaders } from "@/lib/api";
 import { clearSession, userCacheKey } from "@/lib/session";
+import { useAppPreferences } from "@/lib/app-preferences";
 
 export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   const router = useRouter();
+  const { language, theme, toggleLanguage, toggleTheme, t } = useAppPreferences();
   const [loggedIn, setLoggedIn] = useState(false);
   const [role, setRole] = useState("");
   const [approved, setApproved] = useState(false);
@@ -66,17 +68,19 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         <span>TipHouse</span>
       </Link>
       <nav className="flex flex-wrap gap-2 text-sm text-white/70">
-        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/">หน้าแรก</Link>}
-        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/register">สมัครใช้งาน</Link>}
+        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/">{t("หน้าแรก", "Home")}</Link>}
+        {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/register">{t("สมัครใช้งาน", "Register")}</Link>}
         {showPublicMenu && <Link className="btn min-h-9 px-3 py-1" href="/login">Login</Link>}
-        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">หน้าโดเนท</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">{t("หน้าโดเนท", "Donation Page")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
-        {showAppMenu && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">จัดการโปรไฟล์</Link>}
-        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">บัญชีรับเงิน</Link>}
-        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">ตั้งค่าหน้าโดเนท</Link>}
-        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">ตั้งค่า Overlay</Link>}
+        {showAppMenu && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">{t("จัดการโปรไฟล์", "Profile")}</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">{t("บัญชีรับเงิน", "Payout")}</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">{t("ตั้งค่าหน้าโดเนท", "Donation Settings")}</Link>}
+        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">{t("ตั้งค่า Overlay", "Overlay Settings")}</Link>}
         {showAppMenu && role === "ADMIN" && <Link className="btn min-h-9 px-3 py-1" href="/control-admin">Admin</Link>}
         {showAppMenu && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
+        <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleLanguage}>{language === "th" ? "TH/ENG" : "ENG/TH"}</button>
+        <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleTheme}>{theme === "dark" ? "Light" : "Dark"}</button>
       </nav>
     </header>
   );

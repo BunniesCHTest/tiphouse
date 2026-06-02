@@ -2,6 +2,7 @@
 
 import { FormEvent, use, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAppPreferences } from "@/lib/app-preferences";
 
 type PageData = {
   slug: string;
@@ -39,6 +40,7 @@ type DonateStep = "form" | "summary" | "qr" | "success";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const quickAmounts = [50, 100, 300, 500, 1000];
+const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
 
 const defaultPage: PageData = {
   slug: "bunniesch",
@@ -54,8 +56,19 @@ function triggerOverlay(payload: { donorName: string; amount: number; message: s
   localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({ ...payload, nonce: Date.now() }));
 }
 
+function cookieValue(name: string) {
+  if (typeof document === "undefined") return "";
+  return document.cookie.split("; ").find((row) => row.startsWith(`${name}=`))?.split("=")[1] ?? "";
+}
+
+function hasBlockedWord(value: string) {
+  const normalized = value.toLowerCase().replace(/\s+/g, "");
+  return bannedWords.some((word) => normalized.includes(word.toLowerCase().replace(/\s+/g, "")));
+}
+
 export default function DonatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const { t } = useAppPreferences();
   const [page, setPage] = useState<PageData | null>(null);
   const [qr, setQr] = useState<QrState | null>(null);
   const [error, setError] = useState("");
@@ -65,6 +78,9 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
 
   useEffect(() => {
+    const storedDonorName = decodeURIComponent(cookieValue("tiphouse_donor_name"));
+    if (storedDonorName) setFormState((current) => current.anonymous || current.donorName ? current : { ...current, donorName: storedDonorName });
+
     api.get(`/page/${slug}`).then((res) => {
       setPage(res.data);
       setError("");
@@ -83,14 +99,19 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const amountNumber = Number(formState.amount || 0);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
   const displayDonorName = formState.anonymous ? THAI_ANONYMOUS : formState.donorName.trim();
+  const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
+  const blockedMessage = hasBlockedWord(formState.message);
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
-    return Boolean(page && hasDonorName && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
-  }, [amountNumber, formState, page]);
+    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
+  }, [amountNumber, blockedMessage, blockedName, formState, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!page || !canDonate) return;
+    if (!formState.anonymous) {
+      document.cookie = `tiphouse_donor_name=${encodeURIComponent(formState.donorName.trim())};path=/;max-age=31536000;samesite=lax`;
+    }
     setError("");
     setStep("summary");
   }
@@ -196,12 +217,12 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   </div>
                   <div>
                     <h2 className="text-3xl font-black">{page.displayName}</h2>
-                    <p className="mt-1 font-semibold opacity-75">ส่งกำลังใจให้ครีเอเตอร์ที่คุณชอบ</p>
+                    <p className="mt-1 font-semibold opacity-75">{t("ส่งกำลังใจให้ครีเอเตอร์ที่คุณชอบ", "Send support to your favorite creator")}</p>
                   </div>
                 </div>
               </div>
               <section className="draft-panel">
-                <div className="mb-3 font-black">เลือกจำนวนเงิน</div>
+                <div className="mb-3 font-black">{t("เลือกจำนวนเงิน", "Choose Amount")}</div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {quickAmounts.map((amount) => (
                     <button
@@ -215,15 +236,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   ))}
                 </div>
                 <label className="mt-3 block">
-                  กำหนดเอง
+                  {t("กำหนดเอง", "Custom")}
                   <input className={`input mt-2 ${amountTooLow ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
-                  {amountTooLow && <span className="mt-2 block font-bold text-coral">ยอดโดเนทต้องไม่น้อยกว่า ฿{page.minAmount}</span>}
-                  {!amountTooLow && <span className="mt-2 block text-sm text-white/60">ขั้นต่ำ {page.minAmount.toLocaleString("th-TH")} บาท</span>}
+                  {amountTooLow && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿{page.minAmount}</span>}
+                  {!amountTooLow && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {page.minAmount.toLocaleString("th-TH")} {t("บาท", "THB")}</span>}
                 </label>
               </section>
               <section className="draft-panel grid gap-3">
                 <label>
-                  ชื่อผู้โดเนท
+                  {t("ชื่อผู้โดเนท", "Donor Name")}
                   <input
                     className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
                     name="donorName"
@@ -233,15 +254,17 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                     required={!formState.anonymous}
                   />
                 </label>
+                {blockedName && <p className="text-sm font-bold text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
                 <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
                   แสดงเป็น Anonymous
                 </button>
               </section>
               <section className="draft-panel">
-                <label>ข้อความถึงสตรีมเมอร์<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
+                <label>{t("ข้อความถึงสตรีมเมอร์", "Message to Streamer")}<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
+                {blockedMessage && <p className="mt-2 text-sm font-bold text-coral">{t("ข้อความมีคำที่ระบบไม่อนุญาต", "Message contains blocked words")}</p>}
               </section>
               {error && <p className="text-coral">{error}</p>}
-              <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>ดำเนินการต่อ</button>
+              <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>{t("ดำเนินการต่อ", "Continue")}</button>
             </form>
           </div>
         )}
@@ -250,15 +273,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           <div className="phone-frame">
             <section className="phone-screen grid gap-4 p-5">
               <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-ink">
-                <h2 className="text-3xl font-black">ตรวจสอบรายการ</h2>
-                <p className="mt-3 font-semibold opacity-80">ระบบชำระเงินเข้ารหัสและปลอดภัย ตรวจสอบรายการได้ก่อนจ่ายทุกครั้ง</p>
+                <h2 className="text-3xl font-black">{t("ตรวจสอบรายการ", "Review Donation")}</h2>
+                <p className="mt-3 font-semibold opacity-80">{t("ระบบชำระเงินเข้ารหัสและปลอดภัย ตรวจสอบรายการได้ก่อนจ่ายทุกครั้ง", "Review your secure payment before continuing")}</p>
               </div>
               <div className="draft-panel grid gap-3">
                 {[
-                  ["ส่งถึง", page.displayName],
-                  ["ชื่อที่แสดง", displayDonorName],
-                  ["ข้อความ", formState.message],
-                  ["ยอดโดเนท", `฿${amountNumber.toLocaleString("th-TH")}`],
+                  [t("ส่งถึง", "To"), page.displayName],
+                  [t("ชื่อที่แสดง", "Display Name"), displayDonorName],
+                  [t("ข้อความ", "Message"), formState.message],
+                  [t("ยอดโดเนท", "Donation"), `฿${amountNumber.toLocaleString("th-TH")}`],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-start justify-between gap-4 border-b border-dashed border-white/10 pb-3 last:border-0 last:pb-0">
                     <span className="text-white/70">{label}</span>
@@ -266,13 +289,13 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-2">
-                  <span className="font-black">ยอดชำระทั้งหมด</span>
+                  <span className="font-black">{t("ยอดชำระทั้งหมด", "Total")}</span>
                   <strong className="text-4xl font-black text-mint">฿{amountNumber.toLocaleString("th-TH")}</strong>
                 </div>
               </div>
               {error && <p className="text-coral">{error}</p>}
-              <button className="btn btn-primary" type="button" onClick={createQr}>ยืนยันและชำระเงิน</button>
-              <button className="btn" type="button" onClick={() => setStep("form")}>กลับไปแก้ไข</button>
+              <button className="btn btn-primary" type="button" onClick={createQr}>{t("ยืนยันและชำระเงิน", "Confirm and Pay")}</button>
+              <button className="btn" type="button" onClick={() => setStep("form")}>{t("กลับไปแก้ไข", "Back to Edit")}</button>
             </section>
           </div>
         )}
@@ -337,10 +360,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         )}
 
         <aside className="draft-band grid content-start gap-4 p-5">
-          <h2 className="text-2xl font-black">Donation Detail</h2>
-          <p className="text-white/60">QR code จะแสดงหลังจากกรอกข้อมูลครบ ตรวจสอบรายการ และกดยืนยันชำระเงินเท่านั้น</p>
+          <h2 className="text-2xl font-black">{t("วิธีการโดเนท", "How to Donate")}</h2>
+          <p className="text-white/60">{t("ทำตามขั้นตอนด้านล่างเพื่อโดเนทและส่ง Alert ไปยังสตรีมเมอร์", "Follow these steps to donate and send an alert to the streamer")}</p>
           <div className="grid gap-2">
-            {["กรอกข้อมูลโดเนท", "ตรวจสอบรายการ", "ชำระเงินด้วย QR", "ส่ง Alert ไป OBS/Streamlabs"].map((stepLabel, index) => (
+            {[
+              t("เลือกยอดโดเนทและกรอกชื่อ/ข้อความ", "Choose amount and enter name/message"),
+              t("ตรวจสอบรายละเอียดก่อนชำระเงิน", "Review donation details"),
+              t("สแกน QR และชำระเงินตามยอดที่แสดง", "Scan QR and pay the exact amount"),
+              t("กดตรวจสอบสถานะเพื่อส่ง Alert", "Check status to send the alert"),
+            ].map((stepLabel, index) => (
               <div className="draft-step" key={stepLabel}>
                 <span className="draft-step-number">{index + 1}</span>
                 <span className="font-bold">{stepLabel}</span>

@@ -23,6 +23,7 @@ type OverlaySettings = {
   ttsEnabled?: boolean;
   ttsVoice?: "female" | "male";
   soundPreset?: SoundPreset;
+  alertImageUrl?: string;
   widgetHtml?: string;
   widgetCss?: string;
   widgetJs?: string;
@@ -58,6 +59,7 @@ function normalizeSettings(data: any): OverlaySettings {
     ttsEnabled: data?.ttsEnabled ?? true,
     ttsVoice: data?.theme?.ttsVoice ?? "female",
     soundPreset: data?.theme?.soundPreset ?? "chime",
+    alertImageUrl: data?.theme?.alertImageUrl,
     widgetHtml: data?.theme?.widgetHtml,
     widgetCss: data?.theme?.widgetCss,
     widgetJs: data?.theme?.widgetJs,
@@ -112,11 +114,16 @@ function donationSpeechText(payload: AlertPayload) {
 
 function fillTemplate(value: string | undefined, payload: AlertPayload) {
   if (!value) return "";
+  const settings = normalizeSettings(payload.settings);
+  const imageUrl = settings.alertImageUrl ?? "";
+  const imageHtml = imageUrl ? `<img class="tiphouse-image" src="${imageUrl}" alt="" />` : "";
   const replacements: Record<string, string> = {
     donorName: donorNameFor(payload),
     amount: String(payload.amount),
     amountBaht: thaiBaht(payload.amount),
     message: payload.message,
+    imageUrl,
+    imageHtml,
   };
   return Object.entries(replacements).reduce(
     (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
@@ -372,7 +379,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     await speakDonationMessage(donationSpeechText(payload), current.ttsVoice ?? "female");
   }
 
-  const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, alert) : "", [alert, settings.widgetHtml]);
+  const customHtml = useMemo(() => alert ? fillTemplate(settings.widgetHtml, { ...alert, settings }) : "", [alert, settings]);
   const customCss = useMemo(() => alert ? fillTemplate(settings.widgetCss, alert) : "", [alert, settings.widgetCss]);
 
   useEffect(() => {

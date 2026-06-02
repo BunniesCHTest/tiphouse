@@ -42,8 +42,10 @@ export class DonationsService {
   }
 
   async rank(slug: string) {
-    const page = await this.prisma.donationPage.findUnique({ where: { slug } });
+    const page = await this.prisma.donationPage.findUnique({ where: { slug }, include: { user: { include: { overlay: true } } } });
     if (!page) throw new NotFoundException("Donation page not found");
+    const streamlabsRank = await this.streamlabsTopTips(page.user.overlay?.theme).catch(() => []);
+    if (streamlabsRank.length) return streamlabsRank;
     const rows = await this.prisma.donation.groupBy({
       by: ["donorName", "anonymous"],
       where: { pageId: page.id, paymentStatus: DonationStatus.PAID },
@@ -61,6 +63,30 @@ export class DonationsService {
       current.count += row._count._all;
       current.anonymous = current.anonymous || anonymous;
       totals.set(donorName, current);
+    }
+    return [...totals.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+  }
+
+  private async streamlabsTopTips(theme: unknown) {
+    const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
+    if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
+    const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
+      headers: { Authorization: `Bearer ${streamlabs.accessToken}` },
+    });
+    if (!response.ok) return [];
+    const body = await response.json() as any;
+    const donations = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+    const totals = new Map<string, { donorName: string; amount: number; count: number; anonymous: boolean; source: string }>();
+    for (const item of donations) {
+      const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");
+      const amount = Number(item.amount ?? item.formatted_amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const anonymous = donorName.toLowerCase() === "anonymous";
+      const key = anonymous ? "บุคคลนิรนาม" : donorName;
+      const current = totals.get(key) ?? { donorName: key, amount: 0, count: 0, anonymous, source: "streamlabs" };
+      current.amount += amount;
+      current.count += 1;
+      totals.set(key, current);
     }
     return [...totals.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
   }

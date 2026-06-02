@@ -13,6 +13,8 @@ type OverlaySettings = {
   streamerKey: string;
   position: "Center" | "Top" | "Bottom";
   durationSeconds: number;
+  alertImageUrl?: string;
+  customSoundUrl?: string;
   ttsEnabled: boolean;
   ttsVoice: "female" | "male";
   soundPreset: SoundPreset;
@@ -64,6 +66,7 @@ const soundOptions: Array<{ value: SoundPreset; label: string }> = [
 ];
 
 const defaultWidgetHtml = `<div class="tiphouse-alert">
+  {{imageHtml}}
   <div class="tiphouse-name">{{donorName}}</div>
   <div class="tiphouse-amount">\u0e42\u0e14\u0e40\u0e19\u0e17 {{amountBaht}}</div>
   <div class="tiphouse-message">{{message}}</div>
@@ -81,6 +84,12 @@ const defaultWidgetCss = `.tiphouse-alert {
 .tiphouse-name {
   font-size: 44px;
   font-weight: 900;
+}
+.tiphouse-image {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 6px;
 }
 .tiphouse-amount {
   font-size: 34px;
@@ -104,6 +113,8 @@ const defaultSettings: OverlaySettings = {
   streamerKey: "",
   position: "Center",
   durationSeconds: 7,
+  alertImageUrl: "",
+  customSoundUrl: "",
   ttsEnabled: true,
   ttsVoice: "female",
   soundPreset: "chime",
@@ -150,6 +161,8 @@ function normalizeOverlay(data: any, fallback: OverlaySettings = defaultSettings
     streamerKey: data?.streamerKey ?? fallback.streamerKey,
     position: data?.animation?.position ?? fallback.position,
     durationSeconds: data?.animation?.durationSeconds ?? data?.animation?.duration ?? fallback.durationSeconds,
+    alertImageUrl: data?.theme?.alertImageUrl ?? fallback.alertImageUrl,
+    customSoundUrl: data?.soundUrl ?? data?.theme?.customSoundUrl ?? fallback.customSoundUrl,
     ttsEnabled: data?.ttsEnabled ?? fallback.ttsEnabled,
     ttsVoice: data?.theme?.ttsVoice ?? fallback.ttsVoice,
     soundPreset: data?.theme?.soundPreset ?? fallback.soundPreset,
@@ -169,18 +182,22 @@ function fillTemplate(value: string, alert: TestAlert) {
     amount: String(alert.amount),
     amountBaht: `${thaiNumber(alert.amount)}${THAI_BAHT}`,
     message: alert.message,
+    imageUrl: "",
+    imageHtml: "",
   };
   return Object.entries(replacements).reduce((result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement), value);
 }
 
 function overlayPayload(settings: OverlaySettings) {
   return {
-    soundUrl: undefined,
+    soundUrl: settings.customSoundUrl || undefined,
     streamerKey: settings.streamerKey,
     ttsEnabled: settings.ttsEnabled,
     theme: {
       ttsVoice: settings.ttsVoice,
       soundPreset: settings.soundPreset,
+      alertImageUrl: settings.alertImageUrl,
+      customSoundUrl: settings.customSoundUrl,
       streamlabs: {
         connected: settings.streamlabsConnected,
         alertBoxEnabled: settings.streamlabsAlertBoxEnabled,
@@ -195,7 +212,18 @@ function overlayPayload(settings: OverlaySettings) {
 }
 
 function previewDoc(settings: OverlaySettings, alert: TestAlert) {
-  return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(settings.widgetHtml, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
+  const imageHtml = settings.alertImageUrl ? `<img class="tiphouse-image" src="${settings.alertImageUrl}" alt="" />` : "";
+  const replacements = settings.widgetHtml.replaceAll("{{imageUrl}}", settings.alertImageUrl ?? "").replaceAll("{{imageHtml}}", imageHtml);
+  return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(replacements, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function OverlaySettingsPage() {
@@ -280,6 +308,18 @@ export default function OverlaySettingsPage() {
     }
   }
 
+  async function onAlertImageSelected(file?: File) {
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    setSettings({ ...settings, alertImageUrl: dataUrl });
+  }
+
+  async function onSoundSelected(file?: File) {
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    setSettings({ ...settings, customSoundUrl: dataUrl, soundPreset: "none" });
+  }
+
   return (
     <AuthGate>
       <Nav />
@@ -293,7 +333,13 @@ export default function OverlaySettingsPage() {
             <p className="text-sm text-white/55">URL นี้สุ่มเฉพาะ Account ของคุณและระบบตรวจไม่ให้ซ้ำกับ User คนอื่น</p>
             <label>ตำแหน่ง<select className="input mt-2" name="position" value={settings.position} onChange={(event) => setSettings({ ...settings, position: event.target.value as OverlaySettings["position"] })}><option>Center</option><option>Top</option><option>Bottom</option></select></label>
             <label>ระยะเวลาแสดงผล Overlay (วินาที)<input className="input mt-2" name="durationSeconds" type="number" min="3" max="30" value={settings.durationSeconds} onChange={(event) => setSettings({ ...settings, durationSeconds: Number(event.target.value) })} required /></label>
+            <label>รูปภาพ Alert Overlay<input className="input mt-2" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => onAlertImageSelected(event.target.files?.[0])} /></label>
+            <p className="text-sm text-white/55">แนะนำรูปโปร่งใส 512x512 px หรือ GIF สี่เหลี่ยม เพื่อแสดงเหนือชื่อผู้โดเนท</p>
+            {settings.alertImageUrl && <button className="btn" type="button" onClick={() => setSettings({ ...settings, alertImageUrl: "" })}>ลบรูป Alert</button>}
             <label>เสียงแจ้งเตือน<select className="input mt-2" name="soundPreset" value={settings.soundPreset} onChange={(event) => setSettings({ ...settings, soundPreset: event.target.value as SoundPreset })}>{soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label>แนบไฟล์เสียง Alert<input className="input mt-2" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp3" onChange={(event) => onSoundSelected(event.target.files?.[0])} /></label>
+            <p className="text-sm text-white/55">{settings.customSoundUrl ? "ใช้ไฟล์เสียงที่แนบไว้ ระบบจะเล่นก่อน TTS" : "ถ้าไม่แนบไฟล์ ระบบจะใช้เสียงจาก Dropdown"}</p>
+            {settings.customSoundUrl && <button className="btn" type="button" onClick={() => setSettings({ ...settings, customSoundUrl: "" })}>ลบไฟล์เสียง</button>}
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
             <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Streamlabs Alert Box สำหรับ Tips/Variation</label>
