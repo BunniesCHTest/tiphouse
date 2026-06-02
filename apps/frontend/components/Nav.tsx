@@ -76,7 +76,6 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">{t("บัญชีรับเงิน", "Payout")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">{t("ตั้งค่าหน้าโดเนท", "Donation Settings")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">{t("ตั้งค่า Overlay", "Overlay Settings")}</Link>}
-        {showAppMenu && role === "ADMIN" && <Link className="btn min-h-9 px-3 py-1" href="/control-admin">Admin</Link>}
         {showAppMenu && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
         <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleLanguage}>{language === "th" ? "TH/ENG" : "ENG/TH"}</button>
         <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleTheme}>{theme === "dark" ? "Light" : "Dark"}</button>

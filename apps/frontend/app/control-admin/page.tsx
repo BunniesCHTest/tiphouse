@@ -41,12 +41,16 @@ type ApprovalRow = {
   user: UserRow;
 };
 
-const tabs = [
+type AdminTab = "users" | "transactions" | "approvals";
+
+const adminTabs: Array<[AdminTab, string]> = [
   ["users", "จัดการ User"],
   ["transactions", "Transaction โดเนท"],
-] as const;
+];
 
-type AdminTab = (typeof tabs)[number][0] | "approvals";
+const accountingTabs: Array<[AdminTab, string]> = [
+  ["transactions", "Transaction โดเนท"],
+];
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -85,14 +89,26 @@ function downloadExcel(rows: DonationRow[]) {
 export default function AdminPage() {
   const router = useRouter();
   const [active, setActive] = useState<AdminTab>("users");
+  const [role, setRole] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [transactions, setTransactions] = useState<DonationRow[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [creatingUser, setCreatingUser] = useState(false);
   const [userTransactions, setUserTransactions] = useState<DonationRow[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [message, setMessage] = useState("");
+  const [createdPassword, setCreatedPassword] = useState("");
+
+  const canManageUsers = role === "ADMIN";
+  const tabs = canManageUsers ? adminTabs : accountingTabs;
+
+  useEffect(() => {
+    const storedRole = localStorage.getItem("tiphouse_role") ?? "";
+    setRole(storedRole);
+    if (storedRole === "ACCOUNTING") setActive("transactions");
+  }, []);
 
   async function loadUsers() {
     try {
@@ -144,14 +160,33 @@ export default function AdminPage() {
 
   async function refresh() {
     setMessage("");
-    if (active === "users") await loadUsers();
+    if (active === "users" && canManageUsers) await loadUsers();
     if (active === "transactions") await loadTransactions();
     if (active === "approvals") await loadApprovals();
   }
 
   useEffect(() => {
     refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"));
-  }, [active]);
+  }, [active, canManageUsers]);
+
+  async function createStaffUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setCreatedPassword("");
+    const { data } = await api.post(
+      "/admin/users",
+      {
+        username: form.get("username"),
+        email: form.get("email"),
+        role: form.get("role"),
+      },
+      { headers: authHeaders() },
+    );
+    setCreatedPassword(data.tempPassword);
+    setMessage(`สร้าง ${data.user.role} สำเร็จ`);
+    setCreatingUser(false);
+    await loadUsers();
+  }
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -207,7 +242,6 @@ export default function AdminPage() {
       <main className="mx-auto w-[min(1400px,calc(100%-2rem))] py-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="font-bold text-mint">Admin URL: /control-admin</p>
             <h1 className="mt-3 text-5xl font-black">TipHouse Admin</h1>
           </div>
           <button className="btn" type="button" onClick={logout}>Logout</button>
@@ -234,10 +268,12 @@ export default function AdminPage() {
           )}
           <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">ค้นหา</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
+          {active === "users" && canManageUsers && <button className="btn btn-primary" onClick={() => setCreatingUser(true)} type="button">Add / Create User</button>}
         </section>
+        {createdPassword && <p className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-3 text-gold">Temporary password: <strong>{createdPassword}</strong></p>}
         {message && <p className="mt-4 text-mint">{message}</p>}
 
-        {active === "users" && (
+        {active === "users" && canManageUsers && (
           <section className="card mt-5 overflow-auto p-4">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
@@ -324,7 +360,7 @@ export default function AdminPage() {
                 <form onSubmit={saveUser} className="grid gap-4 md:grid-cols-2">
                   <label>Username<input className="input mt-2" name="username" defaultValue={selectedUser.username} required /></label>
                   <label>Email<input className="input mt-2" name="email" type="email" defaultValue={selectedUser.email} required /></label>
-                  <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option></select></label>
+                  <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option><option>ACCOUNTING</option></select></label>
                   <label>Status<select className="input mt-2" name="accountStatus" defaultValue={selectedUser.accountStatus || "PENDING"}><option>PENDING</option><option>APPROVED</option><option>SUSPENDED</option></select></label>
                   <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
                   <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
@@ -351,6 +387,22 @@ export default function AdminPage() {
                 </table>
               </div>
             </section>
+          </div>
+        )}
+
+        {creatingUser && (
+          <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4">
+            <form onSubmit={createStaffUser} className="card grid w-[min(520px,100%)] gap-4 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-3xl font-black">Create User</h2>
+                <button className="btn" type="button" onClick={() => setCreatingUser(false)}>ปิด</button>
+              </div>
+              <label>User<input className="input mt-2" name="username" required /></label>
+              <label>Email<input className="input mt-2" name="email" type="email" required /></label>
+              <label>Role<select className="input mt-2" name="role" defaultValue="ADMIN"><option value="ADMIN">Admin</option><option value="ACCOUNTING">Accounting</option></select></label>
+              <p className="text-sm text-white/60">ระบบจะสร้างรหัสผ่านชั่วคราวให้หลังบันทึก</p>
+              <button className="btn btn-primary" type="submit">Create</button>
+            </form>
           </div>
         )}
       </main>

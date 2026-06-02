@@ -23,7 +23,7 @@ export default function AdminLoginPage() {
         username: form.get("username"),
         password: form.get("password"),
       });
-      if (data.user.role !== "ADMIN") throw new Error("not admin");
+      if (data.user.role !== "ADMIN" && data.user.role !== "ACCOUNTING") throw new Error("not admin");
       localStorage.setItem("tiphouse_access_token", data.tokens.accessToken);
       localStorage.setItem("tiphouse_user_id", data.user.id);
       localStorage.setItem("tiphouse_role", data.user.role);

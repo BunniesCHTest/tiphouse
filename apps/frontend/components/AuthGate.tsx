@@ -12,7 +12,7 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
     const token = localStorage.getItem("tiphouse_access_token");
     const role = localStorage.getItem("tiphouse_role");
     const accountStatus = localStorage.getItem("tiphouse_account_status");
-    const isAllowedRole = Boolean(token) && (!admin || role === "ADMIN");
+    const isAllowedRole = Boolean(token) && (!admin || role === "ADMIN" || role === "ACCOUNTING");
     const isApproved = admin || allowPending || accountStatus === "APPROVED";
     setAllowed(isAllowedRole && isApproved);
     setPendingApproval(Boolean(token) && isAllowedRole && !isApproved);

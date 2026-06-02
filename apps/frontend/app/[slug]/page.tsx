@@ -25,14 +25,6 @@ type QrState = {
   transactionRef: string;
 };
 
-type RecentDonation = {
-  donorName: string;
-  amount: number;
-  message: string;
-  anonymous: boolean;
-  paidAt?: string | null;
-};
-
 type DonorRank = {
   donorName: string;
   amount: number;
@@ -84,7 +76,6 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [error, setError] = useState("");
   const [step, setStep] = useState<DonateStep>("form");
   const [formState, setFormState] = useState({ donorName: "", message: "", amount: "", anonymous: false });
-  const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
 
   useEffect(() => {
@@ -102,7 +93,6 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setPage(null);
       setError("ไม่พบหน้าโดเนทนี้ หรือ backend ยังไม่พร้อม");
     });
-    api.get(`/donations/latest/${slug}`).then((res) => setRecentDonations(res.data ?? [])).catch(() => setRecentDonations([]));
     api.get(`/donations/rank/${slug}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
   }, [slug]);
 
@@ -111,10 +101,11 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const displayDonorName = formState.anonymous ? THAI_ANONYMOUS : formState.donorName.trim();
   const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
   const blockedMessage = hasBlockedWord(formState.message);
+  const messageTooLong = formState.message.length > 250;
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
-    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
-  }, [amountNumber, blockedMessage, blockedName, formState, page]);
+    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount);
+  }, [amountNumber, blockedMessage, blockedName, formState, messageTooLong, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -206,7 +197,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         className="grid min-h-[45vh] content-end bg-cover bg-center p-6"
         style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.bannerUrl ?? defaultPage.bannerUrl})` }}
       >
-        <div className="mx-auto flex w-[min(1100px,100%)] items-end gap-4">
+        <div className="media-on-dark mx-auto flex w-[min(1100px,100%)] items-end gap-4">
           <div className="grid size-20 place-items-center overflow-hidden rounded-2xl border-2 border-white/70 bg-mint text-2xl font-black text-ink">
             {page.avatarUrl ? <img alt="" src={page.avatarUrl} className="size-full object-cover" /> : "TH"}
           </div>
@@ -277,7 +268,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 </button>
               </section>
               <section className="draft-panel">
-                <label>{t("ข้อความถึงสตรีมเมอร์", "Message to Streamer")}<textarea className="input mt-2 min-h-28" name="message" value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value })} required /></label>
+                <label>{t("ข้อความถึงสตรีมเมอร์", "Message to Streamer")}<textarea className="input mt-2 min-h-28" name="message" maxLength={250} value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value.slice(0, 250) })} required /></label>
+                <p className={`mt-2 text-right text-sm ${messageTooLong ? "text-coral" : "text-white/55"}`}>{formState.message.length}/250</p>
                 {blockedMessage && <p className="mt-2 text-sm font-bold text-coral">{t("ข้อความมีคำที่ระบบไม่อนุญาต", "Message contains blocked words")}</p>}
               </section>
               {error && <p className="text-coral">{error}</p>}
@@ -392,20 +384,6 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               </div>
             ))}
           </div>
-          <div className="border-t border-white/10 pt-4">
-            <h3 className="text-xl font-black">Recent Donations</h3>
-            <div className="mt-3 grid gap-3">
-              {recentDonations.length ? recentDonations.map((item, index) => (
-                <div key={`${item.paidAt ?? index}-${item.amount}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <strong>{item.anonymous ? THAI_ANONYMOUS : item.donorName}</strong>
-                    <span className="font-black text-mint">฿{item.amount.toLocaleString("th-TH")}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-white/55">{item.message}</p>
-                </div>
-              )) : <p className="text-sm text-white/45">ยังไม่มีรายการโดเนทล่าสุด</p>}
-            </div>
-          </div>
         </aside>
       </section>
       <section id="top-donator-rank" className="mx-auto w-[min(1180px,calc(100%-2rem))] pb-10">
@@ -413,16 +391,13 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           <h2 className="text-3xl font-black">Top Donator Rank</h2>
           <p className="mt-3 text-sm text-white/65">ระบบ Rank ตามยอดโดเนทสูงสุด เลือกดูรายวัน รายเดือน หรือตลอดกาลได้</p>
           <div className="mt-5 grid gap-3">
-            {(donorRank.length ? donorRank : [
-              { donorName: "NightOwl", amount: 12500, count: 8, anonymous: false },
-              { donorName: "PandaChan", amount: 9200, count: 5, anonymous: false },
-              { donorName: THAI_ANONYMOUS, amount: 5600, count: 3, anonymous: true },
-            ]).map((item, index) => (
+            {donorRank.map((item, index) => (
               <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-4 rounded-2xl border border-sky/20 bg-white/5 p-4">
                 <strong><span className="mr-2 text-mint">#{index + 1}</span>{item.anonymous ? THAI_ANONYMOUS : item.donorName}</strong>
                 <strong>฿{item.amount.toLocaleString("th-TH")}</strong>
               </div>
             ))}
+            {!donorRank.length && <p className="rounded-2xl border border-sky/20 bg-white/5 p-4 text-white/55">ยังไม่มีข้อมูล Top Tippers จาก Streamlabs</p>}
           </div>
         </div>
       </section>

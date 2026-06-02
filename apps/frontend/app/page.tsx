@@ -34,7 +34,7 @@ export default function HomePage() {
             </div>
           </div>
           <section className="card overflow-hidden">
-            <div className="min-h-72 bg-[linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.55)),url('https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80')] bg-cover bg-center p-5">
+            <div className="media-on-dark min-h-72 bg-[linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.55)),url('https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80')] bg-cover bg-center p-5">
               <div className="flex min-h-64 items-end justify-between gap-4">
                 <div>
                   <div className="grid size-20 place-items-center rounded-2xl border-2 border-white/70 bg-mint text-2xl font-black text-ink">TH</div>

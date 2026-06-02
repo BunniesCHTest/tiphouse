@@ -166,11 +166,6 @@ select.input option {
   color: var(--app-muted);
 }
 
-:root[data-theme="light"] .text-white,
-:root[data-theme="light"] .text-white\/75 {
-  color: var(--app-text);
-}
-
 :root[data-theme="light"] .input {
   background: #ffffff;
   color: var(--app-text);
@@ -195,4 +190,14 @@ select.input option {
 
 :root[data-theme="light"] .border-white\/10 {
   border-color: var(--app-border);
+}
+
+.media-on-dark,
+.media-on-dark .text-white,
+.media-on-dark .text-white\/75,
+.media-on-dark .text-white\/70,
+.media-on-dark .text-white\/65,
+.media-on-dark .text-white\/60,
+.media-on-dark .text-white\/55 {
+  color: #ffffff;
 }

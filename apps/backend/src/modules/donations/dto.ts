@@ -10,7 +10,7 @@ export class CreateDonationDto {
   donorName!: string;
 
   @IsString()
-  @MaxLength(240)
+  @MaxLength(250)
   message!: string;
 
   @IsInt()

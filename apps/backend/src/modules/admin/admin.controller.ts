@@ -1,4 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import * as argon2 from "argon2";
+import { randomBytes } from "crypto";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -10,6 +12,10 @@ export class AdminController {
 
   private requireAdmin(user: JwtUser) {
     if (user.role !== "ADMIN") throw new ForbiddenException("admin role required");
+  }
+
+  private requireStaff(user: JwtUser) {
+    if (user.role !== "ADMIN" && user.role !== "ACCOUNTING") throw new ForbiddenException("admin or accounting role required");
   }
 
   @Get("overview")
@@ -82,7 +88,7 @@ export class AdminController {
     @Query("status") status?: string,
     @Query("userId") userId?: string,
   ) {
-    this.requireAdmin(user);
+    this.requireStaff(user);
     return this.prisma.donation.findMany({
       where: {
         userId: userId || undefined,
@@ -105,12 +111,37 @@ export class AdminController {
 
   @Get("transactions/user/:id")
   async userTransactions(@CurrentUser() user: JwtUser, @Param("id") id: string) {
-    this.requireAdmin(user);
+    this.requireStaff(user);
     return this.prisma.donation.findMany({
       where: { userId: id },
       orderBy: { createdAt: "desc" },
       include: { page: { select: { slug: true, displayName: true } } },
     });
+  }
+
+  @Post("users")
+  async createStaffUser(@CurrentUser() admin: JwtUser, @Body() body: any) {
+    this.requireAdmin(admin);
+    const username = String(body.username ?? "").trim();
+    const email = String(body.email ?? "").trim().toLowerCase();
+    const role = String(body.role ?? "ADMIN").toUpperCase();
+    if (!username || !email) throw new ForbiddenException("username and email are required");
+    if (!["ADMIN", "ACCOUNTING"].includes(role)) throw new ForbiddenException("role must be ADMIN or ACCOUNTING");
+    const tempPassword = String(body.password ?? randomBytes(6).toString("base64url"));
+    const created = await this.prisma.user.create({
+      data: {
+        username,
+        email,
+        role: role as any,
+        accountStatus: "APPROVED",
+        passwordHash: await argon2.hash(tempPassword),
+      },
+      select: { id: true, username: true, email: true, role: true, accountStatus: true, createdAt: true },
+    });
+    await this.prisma.adminLog.create({
+      data: { adminId: admin.sub, action: "CREATE_STAFF_USER", targetId: created.id, metadata: { role } },
+    });
+    return { user: created, tempPassword };
   }
 
   @Get("approvals")
