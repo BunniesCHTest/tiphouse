@@ -166,6 +166,11 @@ select.input option {
   color: var(--app-muted);
 }
 
+:root[data-theme="light"] .text-white\/75,
+:root[data-theme="light"] .text-white {
+  color: var(--app-text);
+}
+
 :root[data-theme="light"] .input {
   background: #ffffff;
   color: var(--app-text);
