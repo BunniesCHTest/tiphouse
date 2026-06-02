@@ -34,6 +34,10 @@ export default function DashboardPage() {
   const paidDonations = donations.filter((item) => item.paymentStatus === "PAID");
   const pendingDonations = donations.filter((item) => item.paymentStatus !== "PAID");
   const highestDonation = paidDonations.reduce((max, item) => Math.max(max, item.amount), 0);
+  const revenue = data?.revenue ?? 0;
+  const serviceFee = Math.round(revenue * 0.05);
+  const estimatedTax = Math.round(revenue * 0.07);
+  const estimatedNet = Math.max(0, revenue - serviceFee);
   const bars = [28, 48, 36, 72, 54, 88];
 
   return (
@@ -43,7 +47,7 @@ export default function DashboardPage() {
         <p className="font-bold text-mint">Creator Dashboard</p>
         <h1 className="mt-3 text-5xl font-black">ภาพรวมโดเนท</h1>
         <section className="mt-8 grid gap-4 md:grid-cols-4">
-          <div className="card p-5"><strong className="block text-3xl">฿{(data?.revenue ?? 0).toLocaleString("th-TH")}</strong><span className="text-white/60">รายได้รวมที่ชำระสำเร็จ</span></div>
+          <div className="card p-5"><strong className="block text-3xl">฿{revenue.toLocaleString("th-TH")}</strong><span className="text-white/60">รายได้รวมที่ชำระสำเร็จ</span></div>
           <div className="card p-5"><strong className="block text-3xl">{data?.donationCount ?? 0}</strong><span className="text-white/60">จำนวนรายการทั้งหมด</span></div>
           <div className="card p-5"><strong className="block text-3xl">฿{highestDonation.toLocaleString("th-TH")}</strong><span className="text-white/60">ยอดโดเนทสูงสุด</span></div>
           <div className="card p-5"><strong className="block text-3xl">/{data?.page?.slug ?? "-"}</strong><span className="text-white/60">URL หน้าโดเนท</span></div>
@@ -96,6 +100,71 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="text-3xl font-black">ธุรกรรม</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className="draft-panel p-5">
+              <p className="text-sm text-white/60">รายได้รวม</p>
+              <strong className="mt-4 block text-3xl">฿{revenue.toLocaleString("th-TH")}</strong>
+              <p className="mt-3 text-xs text-white/45">รายได้รวมก่อนหักค่าบริการ</p>
+            </div>
+            <div className="draft-panel p-5">
+              <p className="text-sm text-white/60">ค่าธรรมเนียมการโอน 5%</p>
+              <strong className="mt-4 block text-3xl">฿{serviceFee.toLocaleString("th-TH")}</strong>
+              <p className="mt-3 text-xs text-white/45">คำนวณจากยอดรับชำระสำเร็จ</p>
+            </div>
+            <div className="draft-panel p-5">
+              <p className="text-sm text-white/60">ยอดสุทธิโดยประมาณ</p>
+              <strong className="mt-4 block text-3xl">฿{estimatedNet.toLocaleString("th-TH")}</strong>
+              <p className="mt-3 text-xs text-white/45">ก่อนตรวจเอกสารภาษีและการจ่ายเงินจริง</p>
+            </div>
+          </div>
+
+          <div className="draft-panel mt-5 p-5">
+            <h3 className="text-2xl font-black">ค่าธรรมเนียมและภาษี</h3>
+            <div className="mt-5 grid gap-3">
+              <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
+                <span>ค่าบริการ</span>
+                <strong>5% ของรายได้</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>ภาษีมูลค่าเพิ่ม</span>
+                <strong>ประมาณ ฿{estimatedTax.toLocaleString("th-TH")}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="draft-panel mt-5 p-5">
+            <h3 className="text-2xl font-black">ฟอร์มกรอกภาษี</h3>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <input className="input" placeholder="ชื่อจริง" />
+              <input className="input" placeholder="นามสกุล" />
+              <input className="input" placeholder="เลขที่เสียภาษี" />
+            </div>
+            <div className="mt-5 rounded-2xl border border-dashed border-sky/30 bg-white/5 p-6 text-center text-sm text-white/65">
+              อัปโหลดเอกสารยืนยันตัวตน: บัญชีธนาคาร / บัตรประชาชน
+            </div>
+            <p className="mt-3 text-xs text-white/45">ข้อมูลภาษีจะถูกใช้เพื่อออกเอกสารและตรวจสอบก่อนอนุมัติการถอนเงิน</p>
+          </div>
+
+          <section className="mt-5 overflow-auto">
+            <h3 className="mb-4 text-2xl font-black">ใบเสร็จรับเงิน</h3>
+            <table className="w-full min-w-[760px] overflow-hidden rounded-2xl border border-sky/20 text-left">
+              <thead className="bg-sky/10 text-white/70">
+                <tr><th className="p-3">เลขที่เอกสาร</th><th>วันที่โอนเงิน</th><th>จำนวนเงิน</th><th>Download</th></tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-white/10">
+                  <td className="p-3">RC-2026-0001</td>
+                  <td>{new Date().toLocaleDateString("th-TH")}</td>
+                  <td>฿{estimatedNet.toLocaleString("th-TH")}</td>
+                  <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button">Export PDF</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
         </section>
       </main>
     </AuthGate>
