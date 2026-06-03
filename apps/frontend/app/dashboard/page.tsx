@@ -66,8 +66,20 @@ function formatBaht(amount: number) {
 
 function rowDate(row: HistoryRow) {
   if (!row.when) return null;
-  const date = new Date(row.when);
+  const raw = typeof row.when === "number" ? row.when : String(row.when).trim();
+  const numeric = typeof raw === "number" ? raw : Number(raw);
+  const value = Number.isFinite(numeric) && String(raw).match(/^\d+(\.\d+)?$/)
+    ? numeric < 10_000_000_000
+      ? numeric * 1000
+      : numeric
+    : raw;
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateTime(row: HistoryRow) {
+  const date = rowDate(row);
+  return date ? date.toLocaleString("th-TH") : "-";
 }
 
 function groupKey(date: Date, viewBy: ViewBy) {
@@ -274,7 +286,7 @@ export default function DashboardPage() {
                 <tbody>
                   {pagedRows.map((item) => (
                     <tr key={item.id} className="bg-white/5">
-                      <td className="rounded-l-xl px-3 py-3">{item.when ? new Date(item.when).toLocaleString("th-TH") : "-"}</td>
+                      <td className="rounded-l-xl px-3 py-3">{formatDateTime(item)}</td>
                       <td className="px-3 py-3 font-bold">{item.tipper}</td>
                       <td className="px-3 py-3 text-right">{formatBaht(item.amount)}</td>
                       <td className="px-3 py-3">{item.message || "-"}</td>
@@ -308,7 +320,7 @@ export default function DashboardPage() {
               <tbody>
                 {visibleRows.map((item) => (
                   <tr key={item.id} className="border-t border-white/10">
-                    <td className="p-2">{item.when ? new Date(item.when).toLocaleString("th-TH") : "-"}</td>
+                    <td className="p-2">{formatDateTime(item)}</td>
                     <td>{item.provider}</td>
                     <td>{item.reference ? <Link className="text-mint underline" href={`/receipt/${encodeURIComponent(item.reference)}`} target="_blank">{item.reference}</Link> : "-"}</td>
                     <td>{formatBaht(item.amount)}</td>
