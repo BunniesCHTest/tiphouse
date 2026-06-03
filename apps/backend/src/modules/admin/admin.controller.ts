@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, ConflictException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { DonationStatus, PaymentProvider } from "@prisma/client";
 import * as argon2 from "argon2";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
@@ -83,6 +83,25 @@ export class AdminController {
       data: { adminId: admin.sub, action: "UPDATE_USER", targetId: id, metadata: { fields: Object.keys(body) } },
     });
     return updated;
+  }
+
+  @Delete("users/:id")
+  async deleteUser(@CurrentUser() admin: JwtUser, @Param("id") id: string) {
+    this.requireAdmin(admin);
+    if (admin.sub === id) throw new ForbiddenException("Cannot delete your own admin account");
+    const target = await this.prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, username: true, email: true, role: true },
+    });
+    if (target.role === "ADMIN") {
+      const adminCount = await this.prisma.user.count({ where: { role: "ADMIN" } });
+      if (adminCount <= 1) throw new ForbiddenException("Cannot delete the last admin account");
+    }
+    await this.prisma.adminLog.create({
+      data: { adminId: admin.sub, action: "DELETE_USER", targetId: id, metadata: { username: target.username, email: target.email, role: target.role } },
+    });
+    await this.prisma.user.delete({ where: { id } });
+    return { ok: true, deleted: target };
   }
 
   @Get("transactions")

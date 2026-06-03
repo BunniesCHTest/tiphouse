@@ -188,6 +188,7 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [createdPassword, setCreatedPassword] = useState("");
   const [importing, setImporting] = useState(false);
+  const [adminUserId, setAdminUserId] = useState("");
 
   const canManageUsers = role === "ADMIN";
   const tabs: Array<[AdminTab, string]> = canManageUsers
@@ -195,7 +196,9 @@ export default function AdminPage() {
     : accountingTabs;
 
   useEffect(() => {
-    const storedRole = getSession("admin").role;
+    const session = getSession("admin");
+    const storedRole = session.role;
+    setAdminUserId(session.userId);
     setRole(storedRole);
     if (storedRole === "ACCOUNTING") setActive("transactions");
   }, []);
@@ -307,6 +310,13 @@ export default function AdminPage() {
     const { data } = await api.post(`/admin/users/${user.id}/reset-password`, {}, { headers: authHeaders("admin") });
     setCreatedPassword(data.tempPassword);
     setMessage(`Reset password ของ ${user.username} เป็นรหัส Default Abc@1234 แล้ว`);
+  }
+
+  async function deleteUser(user: UserRow) {
+    if (!window.confirm(`Delete user ${user.username}? This permanently removes the user and related data.`)) return;
+    await api.delete(`/admin/users/${user.id}`, { headers: authHeaders("admin") });
+    setMessage(`Deleted user ${user.username}`);
+    await loadUsers();
   }
 
   async function showUserHistory(user: UserRow) {
@@ -471,6 +481,7 @@ export default function AdminPage() {
                       <button className="btn" onClick={() => setSelectedUser(user)} type="button">แก้ไข</button>
                       <button className="btn" onClick={() => showUserHistory(user)} type="button">ประวัติ</button>
                       {(user.role === "ADMIN" || user.role === "ACCOUNTING") && <button className="btn" onClick={() => resetPassword(user)} type="button">Reset Password</button>}
+                      {user.id !== adminUserId && <button className="btn border-coral/50 text-coral" onClick={() => deleteUser(user)} type="button">Delete</button>}
                     </td>
                   </tr>
                 ))}
