@@ -63,6 +63,8 @@ type ApprovalRow = {
 
 type AdminTab = "users" | "transactions" | "approvals";
 
+const TRANSACTION_PAGE_SIZE = 10;
+
 const adminTabs: Array<[AdminTab, string]> = [
   ["users", "จัดการ User"],
   ["transactions", "Transaction โดเนท"],
@@ -173,7 +175,7 @@ function rowsToImportPayload(rows: string[][]) {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [active, setActive] = useState<AdminTab>("users");
+  const [active, setActive] = useState<AdminTab>("approvals");
   const [role, setRole] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [transactions, setTransactions] = useState<DonationRow[]>([]);
@@ -189,6 +191,7 @@ export default function AdminPage() {
   const [createdPassword, setCreatedPassword] = useState("");
   const [importing, setImporting] = useState(false);
   const [adminUserId, setAdminUserId] = useState("");
+  const [transactionPage, setTransactionPage] = useState(1);
 
   const canManageUsers = role === "ADMIN";
   const tabs: Array<[AdminTab, string]> = canManageUsers
@@ -201,11 +204,12 @@ export default function AdminPage() {
     setAdminUserId(session.userId);
     setRole(storedRole);
     if (storedRole === "ACCOUNTING") setActive("transactions");
+    if (storedRole === "ADMIN") setActive("approvals");
   }, []);
 
-  async function loadUsers() {
+  async function loadUsers(nextQuery = query) {
     try {
-      const { data } = await api.get("/admin/users", { headers: authHeaders("admin"), params: { q: query || undefined } });
+      const { data } = await api.get("/admin/users", { headers: authHeaders("admin"), params: { q: nextQuery || undefined } });
       setUsers(asArray<UserRow>(data));
     } catch (error) {
       setUsers([]);
@@ -218,11 +222,11 @@ export default function AdminPage() {
     }
   }
 
-  async function loadTransactions() {
+  async function loadTransactions(nextQuery = query, nextStatus = status) {
     try {
       const { data } = await api.get("/admin/transactions", {
         headers: authHeaders("admin"),
-        params: { q: query || undefined, status: status || undefined },
+        params: { q: nextQuery || undefined, status: nextStatus || undefined },
       });
       setTransactions(asArray<DonationRow>(data));
     } catch (error) {
@@ -251,10 +255,10 @@ export default function AdminPage() {
     }
   }
 
-  async function refresh() {
+  async function refresh(nextQuery = query, nextStatus = status) {
     setMessage("");
-    if (active === "users" && canManageUsers) await loadUsers();
-    if (active === "transactions") await loadTransactions();
+    if (active === "users" && canManageUsers) await loadUsers(nextQuery);
+    if (active === "transactions") await loadTransactions(nextQuery, nextStatus);
     if (active === "approvals") await loadApprovals();
   }
 
@@ -350,6 +354,7 @@ export default function AdminPage() {
       }
       const { data } = await api.post("/admin/transactions/import", { rows }, { headers: authHeaders("admin") });
       setMessage(`Import สำเร็จ ${data.imported ?? 0} รายการ`);
+      setTransactionPage(1);
       await loadTransactions();
     } catch {
       setMessage("Import ไม่สำเร็จ กรุณาตรวจสอบไฟล์และคอลัมน์ข้อมูล");
@@ -364,12 +369,19 @@ export default function AdminPage() {
   }
 
   const totalRevenue = useMemo(() => transactions.reduce((sum, row) => sum + (row.paymentStatus === "PAID" ? row.amount : 0), 0), [transactions]);
+  const totalTransactionPages = Math.max(1, Math.ceil(transactions.length / TRANSACTION_PAGE_SIZE));
+  const safeTransactionPage = Math.min(transactionPage, totalTransactionPages);
+  const pagedTransactions = transactions.slice(
+    (safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE,
+    safeTransactionPage * TRANSACTION_PAGE_SIZE,
+  );
 
-  function clearFilters() {
+  async function clearFiltersNow() {
     setQuery("");
     setStatus("");
     setMessage("");
-    window.setTimeout(() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ")), 25);
+    setTransactionPage(1);
+    await refresh("", "");
   }
 
   function exportUsers() {
@@ -430,9 +442,9 @@ export default function AdminPage() {
               <option value="REVIEW">REVIEW</option>
             </select>
           )}
-          <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">ค้นหา</button>
-          <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button" title="Refresh">↻</button>
-          <button className="btn" onClick={clearFilters} type="button">CLEAR</button>
+          <button className="btn" onClick={() => { setTransactionPage(1); refresh(query, status).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ")); }} type="button">ค้นหา</button>
+          <button className="btn" onClick={() => refresh(query, status).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button" title="Refresh">↻</button>
+          <button className="btn" onClick={() => clearFiltersNow().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">CLEAR</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
           {active === "transactions" && (
             <label className={`btn cursor-pointer ${importing ? "opacity-60" : ""}`}>
@@ -498,7 +510,7 @@ export default function AdminPage() {
                 <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th></tr>
               </thead>
               <tbody>
-                {transactions.map((row) => (
+                {pagedTransactions.map((row) => (
                   <tr key={row.id} className="border-t border-white/10">
                     <td className="py-3">{new Date(row.paidAt ?? row.createdAt).toLocaleString("th-TH")}</td>
                     <td>
@@ -516,6 +528,43 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+            {transactions.length > TRANSACTION_PAGE_SIZE && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4 text-sm text-white/70">
+                <span>
+                  Showing {(safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE + 1}
+                  -{Math.min(safeTransactionPage * TRANSACTION_PAGE_SIZE, transactions.length)}
+                  {" / "}
+                  {transactions.length}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className="btn h-9 min-h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={safeTransactionPage <= 1}
+                    onClick={() => setTransactionPage((page) => Math.max(1, page - 1))}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <select
+                    className="input h-9 min-h-9 w-32 py-1 text-sm"
+                    value={safeTransactionPage}
+                    onChange={(event) => setTransactionPage(Number(event.target.value))}
+                  >
+                    {Array.from({ length: totalTransactionPages }, (_, index) => (
+                      <option key={index + 1} value={index + 1}>Page {index + 1}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn h-9 min-h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={safeTransactionPage >= totalTransactionPages}
+                    onClick={() => setTransactionPage((page) => Math.min(totalTransactionPages, page + 1))}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
