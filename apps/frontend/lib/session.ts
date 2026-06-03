@@ -5,20 +5,40 @@ export type TipHouseUser = {
   creatorSetupCompleted?: boolean;
 };
 
-export function saveSession(user: TipHouseUser, accessToken: string) {
-  localStorage.setItem("tiphouse_access_token", accessToken);
-  localStorage.setItem("tiphouse_user_id", user.id);
-  localStorage.setItem("tiphouse_role", user.role);
-  if (user.accountStatus) localStorage.setItem("tiphouse_account_status", user.accountStatus);
-  localStorage.setItem("tiphouse_creator_setup_completed", user.creatorSetupCompleted ? "true" : "false");
+export type SessionScope = "user" | "admin";
+
+function key(scope: SessionScope, name: string) {
+  return scope === "admin" ? `tiphouse_admin_${name}` : `tiphouse_${name}`;
 }
 
-export function clearSession() {
-  localStorage.removeItem("tiphouse_access_token");
-  localStorage.removeItem("tiphouse_user_id");
-  localStorage.removeItem("tiphouse_role");
-  localStorage.removeItem("tiphouse_account_status");
-  localStorage.removeItem("tiphouse_creator_setup_completed");
+export function saveSession(user: TipHouseUser, accessToken: string, scope: SessionScope = user.role === "ADMIN" || user.role === "ACCOUNTING" ? "admin" : "user") {
+  localStorage.setItem(key(scope, "access_token"), accessToken);
+  localStorage.setItem(key(scope, "user_id"), user.id);
+  localStorage.setItem(key(scope, "role"), user.role);
+  if (user.accountStatus) localStorage.setItem(key(scope, "account_status"), user.accountStatus);
+  localStorage.setItem(key(scope, "creator_setup_completed"), user.creatorSetupCompleted ? "true" : "false");
+}
+
+export function getSession(scope: SessionScope = "user") {
+  return {
+    accessToken: localStorage.getItem(key(scope, "access_token")) || "",
+    userId: localStorage.getItem(key(scope, "user_id")) || "",
+    role: localStorage.getItem(key(scope, "role")) || "",
+    accountStatus: localStorage.getItem(key(scope, "account_status")) || "",
+    creatorSetupCompleted: localStorage.getItem(key(scope, "creator_setup_completed")) === "true",
+  };
+}
+
+export function setSessionValue(scope: SessionScope, name: "role" | "account_status" | "creator_setup_completed", value: string) {
+  localStorage.setItem(key(scope, name), value);
+}
+
+export function clearSession(scope: SessionScope = "user") {
+  localStorage.removeItem(key(scope, "access_token"));
+  localStorage.removeItem(key(scope, "user_id"));
+  localStorage.removeItem(key(scope, "role"));
+  localStorage.removeItem(key(scope, "account_status"));
+  localStorage.removeItem(key(scope, "creator_setup_completed"));
 }
 
 export function currentUserId() {

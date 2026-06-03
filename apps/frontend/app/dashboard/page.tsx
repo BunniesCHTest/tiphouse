@@ -42,6 +42,7 @@ type HistoryRow = {
 
 type ViewBy = "day" | "week" | "month" | "year";
 type DashboardTab = "overview" | "transactions";
+type BarRow = { label: string; value: number; height: number };
 
 const PAGE_SIZE = 10;
 
@@ -105,9 +106,10 @@ export default function DashboardPage() {
 
   const donations = useMemo<Donation[]>(() => data?.donations ?? [], [data]);
   const streamlabsTips = useMemo<StreamlabsTip[]>(() => data?.streamlabsTips ?? [], [data]);
+
   const allRows = useMemo<HistoryRow[]>(() => {
     const streamlabsRows = streamlabsTips.map((item) => ({
-      id: item.id,
+      id: `streamlabs-${item.id}`,
       when: item.when,
       tipper: item.tipper,
       amount: item.amount,
@@ -120,7 +122,7 @@ export default function DashboardPage() {
     const localRows = donations
       .filter((item) => item.paymentStatus === "PAID")
       .map((item) => ({
-        id: item.id,
+        id: `tiphouse-${item.id}`,
         when: item.paidAt ?? item.createdAt ?? null,
         tipper: item.anonymous ? "บุคคลนิรนาม" : item.donorName,
         amount: item.amount,
@@ -130,7 +132,7 @@ export default function DashboardPage() {
         source: "tiphouse" as const,
         anonymous: item.anonymous,
       }));
-    return (streamlabsRows.length ? streamlabsRows : localRows).sort((a, b) => (rowDate(b)?.getTime() ?? 0) - (rowDate(a)?.getTime() ?? 0));
+    return [...streamlabsRows, ...localRows].sort((a, b) => (rowDate(b)?.getTime() ?? 0) - (rowDate(a)?.getTime() ?? 0));
   }, [donations, streamlabsTips]);
 
   const filteredRows = useMemo(() => {
@@ -142,27 +144,47 @@ export default function DashboardPage() {
     });
   }, [allRows, fromDate, toDate]);
 
-  const revenue = filteredRows.reduce((sum, item) => sum + item.amount, 0);
-  const highestDonation = filteredRows.reduce((max, item) => Math.max(max, item.amount), 0);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const pagedRows = filteredRows.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+  const visibleRows = filteredRows.length ? filteredRows : allRows;
+  const revenue = visibleRows.reduce((sum, item) => sum + item.amount, 0);
+  const highestDonation = visibleRows.reduce((max, item) => Math.max(max, item.amount), 0);
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+  const pagedRows = visibleRows.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
   useEffect(() => {
     setHistoryPage(1);
   }, [fromDate, toDate, viewBy, data]);
 
-  const bars = useMemo(() => {
+  const bars = useMemo<BarRow[]>(() => {
     const groups = new Map<string, number>();
-    for (const item of filteredRows) {
+    for (const item of visibleRows) {
       const date = rowDate(item);
       if (!date) continue;
       const key = groupKey(date, viewBy);
       groups.set(key, (groups.get(key) ?? 0) + item.amount);
     }
-    const values = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, value]) => value).slice(-12);
-    const max = Math.max(...values, 1);
-    return values.length ? values.map((value) => Math.max(12, Math.round((value / max) * 100))) : [];
-  }, [filteredRows, viewBy]);
+    const values = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-12);
+    const max = Math.max(...values.map(([, value]) => value), 1);
+    return values.map(([label, value]) => ({ label, value, height: Math.max(12, Math.round((value / max) * 100)) }));
+  }, [visibleRows, viewBy]);
+
+  const topDonators = useMemo(() => {
+    const groups = new Map<string, number>();
+    for (const item of visibleRows) {
+      const name = item.anonymous ? "Anonymous" : item.tipper || "Anonymous";
+      groups.set(name, (groups.get(name) ?? 0) + item.amount);
+    }
+    return [...groups.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, amount], index) => ({ name, amount, rank: index + 1 }));
+  }, [visibleRows]);
+
+  function clearDashboardFilters() {
+    setFromDate(defaultFromDate());
+    setToDate(defaultToDate());
+    setViewBy("day");
+    setHistoryPage(1);
+  }
 
   return (
     <AuthGate>
@@ -184,7 +206,7 @@ export default function DashboardPage() {
           <>
             <section className="mt-8 grid gap-4 md:grid-cols-4">
               <div className="card p-5"><strong className="block text-3xl">{formatBaht(revenue)}</strong><span className="text-white/60">{t("รายได้ที่ชำระสำเร็จ", "Paid Revenue")}</span></div>
-              <div className="card p-5"><strong className="block text-3xl">{filteredRows.length}</strong><span className="text-white/60">{t("รายการในช่วงที่เลือก", "Transactions in Range")}</span></div>
+              <div className="card p-5"><strong className="block text-3xl">{visibleRows.length}</strong><span className="text-white/60">{t("รายการในช่วงที่เลือก", "Transactions in Range")}</span></div>
               <div className="card p-5"><strong className="block text-3xl">{formatBaht(highestDonation)}</strong><span className="text-white/60">{t("ยอดโดเนทสูงสุด", "Highest Donation")}</span></div>
               <div className="card p-5"><strong className="block text-3xl">/{data?.page?.slug ?? "-"}</strong><span className="text-white/60">{t("URL หน้าโดเนท", "Donation URL")}</span></div>
             </section>
@@ -204,19 +226,40 @@ export default function DashboardPage() {
                   </label>
                   <label className="grid gap-1">{t("จาก", "From")}<input className="input h-12 min-w-40 py-2" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
                   <label className="grid gap-1">{t("ถึง", "To")}<input className="input h-12 min-w-40 py-2" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
+                  <button className="btn h-12" type="button" onClick={clearDashboardFilters}>CLEAR</button>
                 </div>
               </div>
-              <div className="mt-5 flex h-64 items-end gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                {bars.length ? bars.map((height, index) => (
-                  <div key={index} className="flex-1 rounded-t-xl bg-gradient-to-t from-mint to-coral" style={{ height: `${height}%` }} />
+              {!filteredRows.length && allRows.length > 0 && (
+                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก จึงแสดงรายการล่าสุดแทน", "No data in the selected range, showing latest records instead.")}</p>
+              )}
+              <div className="mt-5 flex h-72 items-end gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                {bars.length ? bars.map((bar) => (
+                  <div key={bar.label} className="flex h-full flex-1 min-w-0 flex-col justify-end gap-2 text-center">
+                    <span className="truncate text-xs font-bold text-white/70">{formatBaht(bar.value)}</span>
+                    <div className="rounded-t-xl bg-gradient-to-t from-mint to-coral" style={{ height: `${bar.height}%` }} />
+                    <span className="truncate text-[11px] text-white/50">{bar.label}</span>
+                  </div>
                 )) : <div className="grid h-full w-full place-items-center text-white/45">{t("ยังไม่มีข้อมูลในช่วงวันที่นี้", "No data in this date range")}</div>}
+              </div>
+            </section>
+
+            <section className="card mt-5 p-5">
+              <h2 className="text-2xl font-black">Top Donator Rank</h2>
+              <div className="mt-4 grid gap-3">
+                {topDonators.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                    <span className="font-bold">#{item.rank} {item.name}</span>
+                    <span className="font-black text-mint">{formatBaht(item.amount)}</span>
+                  </div>
+                ))}
+                {!topDonators.length && <p className="text-white/45">{t("ยังไม่มีข้อมูลอันดับผู้โดเนท", "No top donator data yet")}</p>}
               </div>
             </section>
 
             <section className="card mt-5 overflow-auto p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-2xl font-black">{t("ประวัติโดเนท", "Donation History")}</h2>
-                <p className="text-sm text-white/55">{t("แสดง", "Showing")} {pagedRows.length} / {filteredRows.length}</p>
+                <p className="text-sm text-white/55">{t("แสดง", "Showing")} {pagedRows.length} / {visibleRows.length}</p>
               </div>
               <table className="w-full min-w-[980px] table-fixed border-separate border-spacing-y-2 text-left">
                 <thead className="text-white/60">
@@ -263,7 +306,7 @@ export default function DashboardPage() {
             <table className="w-full min-w-[860px] text-left">
               <thead className="text-white/60"><tr><th className="p-2">{t("วันที่", "When")}</th><th>{t("รายการ", "Method")}</th><th>{t("เลขที่อ้างอิง", "Reference")}</th><th>{t("จำนวนเงิน", "Amount")}</th></tr></thead>
               <tbody>
-                {filteredRows.map((item) => (
+                {visibleRows.map((item) => (
                   <tr key={item.id} className="border-t border-white/10">
                     <td className="p-2">{item.when ? new Date(item.when).toLocaleString("th-TH") : "-"}</td>
                     <td>{item.provider}</td>
@@ -271,7 +314,7 @@ export default function DashboardPage() {
                     <td>{formatBaht(item.amount)}</td>
                   </tr>
                 ))}
-                {!filteredRows.length && <tr><td className="p-4 text-white/45" colSpan={4}>{t("ยังไม่มีรายการธุรกรรม", "No transactions yet")}</td></tr>}
+                {!visibleRows.length && <tr><td className="p-4 text-white/45" colSpan={4}>{t("ยังไม่มีรายการธุรกรรม", "No transactions yet")}</td></tr>}
               </tbody>
             </table>
           </section>

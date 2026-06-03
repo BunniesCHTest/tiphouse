@@ -50,4 +50,9 @@ export class AuthController {
   streamlabsCallback(@Query("code") code: string, @Query("state") state: string | undefined, @Res() res: Response) {
     return this.auth.streamlabsCallback(code, state, res);
   }
+
+  @Post("streamlabs/exchange")
+  streamlabsExchange(@Body("code") code: string) {
+    return this.auth.exchangeStreamlabsLogin(code);
+  }
 }

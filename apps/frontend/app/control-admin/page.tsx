@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthGate } from "@/components/AuthGate";
 import { api, authHeaders } from "@/lib/api";
-import { clearSession } from "@/lib/session";
+import { clearSession, getSession } from "@/lib/session";
 
 type UserRow = {
   id: string;
@@ -30,7 +30,7 @@ type UserRow = {
     payoutMethod?: string | null;
     kycStatus?: string | null;
   } | null;
-  page?: { slug: string; displayName: string; minAmount: number; goalAmount: number } | null;
+  page?: { slug: string; displayName: string; minAmount?: number; goalAmount?: number } | null;
   _count?: { donations: number; approvals: number };
 };
 
@@ -195,20 +195,20 @@ export default function AdminPage() {
     : accountingTabs;
 
   useEffect(() => {
-    const storedRole = localStorage.getItem("tiphouse_role") ?? "";
+    const storedRole = getSession("admin").role;
     setRole(storedRole);
     if (storedRole === "ACCOUNTING") setActive("transactions");
   }, []);
 
   async function loadUsers() {
     try {
-      const { data } = await api.get("/admin/users", { headers: authHeaders(), params: { q: query || undefined } });
+      const { data } = await api.get("/admin/users", { headers: authHeaders("admin"), params: { q: query || undefined } });
       setUsers(asArray<UserRow>(data));
     } catch (error) {
       setUsers([]);
       if (isAuthError(error)) {
         setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
-        clearSession();
+        clearSession("admin");
         return;
       }
       setMessage("โหลดรายการ User ไม่สำเร็จ");
@@ -218,7 +218,7 @@ export default function AdminPage() {
   async function loadTransactions() {
     try {
       const { data } = await api.get("/admin/transactions", {
-        headers: authHeaders(),
+        headers: authHeaders("admin"),
         params: { q: query || undefined, status: status || undefined },
       });
       setTransactions(asArray<DonationRow>(data));
@@ -226,7 +226,7 @@ export default function AdminPage() {
       setTransactions([]);
       if (isAuthError(error)) {
         setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
-        clearSession();
+        clearSession("admin");
         return;
       }
       setMessage("โหลดรายการ transaction ไม่สำเร็จ");
@@ -235,13 +235,13 @@ export default function AdminPage() {
 
   async function loadApprovals() {
     try {
-      const { data } = await api.get("/admin/approvals", { headers: authHeaders(), params: { status: "PENDING" } });
+      const { data } = await api.get("/admin/approvals", { headers: authHeaders("admin") });
       setApprovals(asArray<ApprovalRow>(data));
     } catch (error) {
       setApprovals([]);
       if (isAuthError(error)) {
         setMessage("Session หมดอายุ กรุณา Login Admin ใหม่");
-        clearSession();
+        clearSession("admin");
         return;
       }
       setMessage("โหลดรายการขออนุมัติไม่สำเร็จ");
@@ -270,7 +270,7 @@ export default function AdminPage() {
         email: form.get("email"),
         role: form.get("role"),
       },
-      { headers: authHeaders() },
+      { headers: authHeaders("admin") },
     );
     setCreatedPassword(data.tempPassword);
     setMessage(`สร้าง ${data.user.role} สำเร็จ`);
@@ -293,11 +293,9 @@ export default function AdminPage() {
         page: {
           slug: form.get("slug"),
           displayName: form.get("displayName"),
-          minAmount: Number(form.get("minAmount")),
-          goalAmount: Number(form.get("goalAmount")),
         },
       },
-      { headers: authHeaders() },
+      { headers: authHeaders("admin") },
     );
     setMessage("บันทึกข้อมูล User สำเร็จ");
     setSelectedUser(null);
@@ -306,7 +304,7 @@ export default function AdminPage() {
 
   async function resetPassword(user: UserRow) {
     setCreatedPassword("");
-    const { data } = await api.post(`/admin/users/${user.id}/reset-password`, {}, { headers: authHeaders() });
+    const { data } = await api.post(`/admin/users/${user.id}/reset-password`, {}, { headers: authHeaders("admin") });
     setCreatedPassword(data.tempPassword);
     setMessage(`Reset password ของ ${user.username} เป็นรหัส Default Abc@1234 แล้ว`);
   }
@@ -315,7 +313,7 @@ export default function AdminPage() {
     setSelectedUser(null);
     setHistoryUser(user);
     try {
-      const { data } = await api.get(`/admin/transactions/user/${user.id}`, { headers: authHeaders() });
+      const { data } = await api.get(`/admin/transactions/user/${user.id}`, { headers: authHeaders("admin") });
       setUserTransactions(asArray<DonationRow>(data));
     } catch {
       setUserTransactions([]);
@@ -324,7 +322,7 @@ export default function AdminPage() {
   }
 
   async function review(id: string, action: "approve" | "reject") {
-    await api.post(`/admin/approvals/${id}/${action}`, {}, { headers: authHeaders() });
+    await api.post(`/admin/approvals/${id}/${action}`, {}, { headers: authHeaders("admin") });
     setMessage(action === "approve" ? "อนุมัติคำขอแล้ว" : "ปฏิเสธคำขอแล้ว");
     await loadApprovals();
   }
@@ -340,7 +338,7 @@ export default function AdminPage() {
         setMessage("ไม่พบข้อมูลสำหรับ import กรุณาใช้คอลัมน์ วันที่, ชื่อ, จำนวนเงิน, ช่องทาง, ข้อความ");
         return;
       }
-      const { data } = await api.post("/admin/transactions/import", { rows }, { headers: authHeaders() });
+      const { data } = await api.post("/admin/transactions/import", { rows }, { headers: authHeaders("admin") });
       setMessage(`Import สำเร็จ ${data.imported ?? 0} รายการ`);
       await loadTransactions();
     } catch {
@@ -351,14 +349,45 @@ export default function AdminPage() {
   }
 
   async function replayAlert(row: DonationRow) {
-    await api.post(`/admin/transactions/${row.id}/replay-alert`, {}, { headers: authHeaders() });
+    await api.post(`/admin/transactions/${row.id}/replay-alert`, {}, { headers: authHeaders("admin") });
     setMessage(`ส่ง Alert ซ้ำแล้ว: ${row.transactionRef ?? row.id}`);
   }
 
   const totalRevenue = useMemo(() => transactions.reduce((sum, row) => sum + (row.paymentStatus === "PAID" ? row.amount : 0), 0), [transactions]);
 
+  function clearFilters() {
+    setQuery("");
+    setStatus("");
+    setMessage("");
+    window.setTimeout(() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ")), 25);
+  }
+
+  function exportUsers() {
+    const header = ["User", "Display Name", "Email", "Donation Email", "Login", "Status", "Role", "Donation URL"];
+    const rows = users.map((user) => [
+      user.username,
+      user.page?.displayName ?? "",
+      user.email,
+      user.donationNotificationEmail ?? "",
+      user.authProvider ?? "Email",
+      displayUserStatus(user),
+      user.role,
+      user.page?.slug ? `/${user.page.slug}` : "",
+    ]);
+    const html = `<table><tr>${header.map((h) => `<th>${h}</th>`).join("")}</tr>${rows
+      .map((row) => `<tr>${row.map((cell) => `<td>${String(cell).replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</td>`).join("")}</tr>`)
+      .join("")}</table>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tiphouse-users-${Date.now()}.xls`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function logout() {
-    clearSession();
+    clearSession("admin");
     router.push("/control-admin/login");
   }
 
@@ -392,6 +421,8 @@ export default function AdminPage() {
             </select>
           )}
           <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">ค้นหา</button>
+          <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button" title="Refresh">↻</button>
+          <button className="btn" onClick={clearFilters} type="button">CLEAR</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
           {active === "transactions" && (
             <label className={`btn cursor-pointer ${importing ? "opacity-60" : ""}`}>
@@ -405,6 +436,7 @@ export default function AdminPage() {
               />
             </label>
           )}
+          {active === "users" && canManageUsers && <button className="btn" onClick={exportUsers} type="button">Export Excel</button>}
           {active === "users" && canManageUsers && <button className="btn btn-primary" onClick={() => setCreatingUser(true)} type="button">Add / Create User</button>}
         </section>
         {createdPassword && <p className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-3 text-gold">Temporary password: <strong>{createdPassword}</strong></p>}
@@ -490,7 +522,7 @@ export default function AdminPage() {
                     <td>{approvalDetails(row).newUsername || approvalDetails(row).newEmail || row.requestedEmail || "-"}</td>
                     <td>{row.status}</td>
                     <td>{new Date(row.createdAt).toLocaleString("th-TH")}</td>
-                    <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => setSelectedApproval(row)}>i</button></td>
+                    <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => setSelectedApproval(row)}>Detail</button></td>
                     <td className="flex gap-2 py-2">
                       <button className="btn btn-primary" onClick={() => review(row.id, "approve")} type="button">อนุมัติ</button>
                       <button className="btn" onClick={() => review(row.id, "reject")} type="button">ปฏิเสธ</button>
@@ -540,8 +572,6 @@ export default function AdminPage() {
                   <label>Status<select className="input mt-2" name="accountStatus" defaultValue={displayUserStatus(selectedUser)}><option>ACTIVE</option><option>SUSPENDED</option><option>PENDING</option></select></label>
                   <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
                   <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
-                  <label>ยอดขั้นต่ำ<input className="input mt-2" name="minAmount" type="number" defaultValue={selectedUser.page?.minAmount ?? 20} /></label>
-                  <label>Goal<input className="input mt-2" name="goalAmount" type="number" defaultValue={selectedUser.page?.goalAmount ?? 5000} /></label>
                   <button className="btn btn-primary md:col-span-2" type="submit">บันทึกข้อมูล User</button>
                 </form>
               )}

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getSession, SessionScope } from "./session";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api",
@@ -6,8 +7,8 @@ export const api = axios.create({
   timeout: 30000,
 });
 
-export function authHeaders() {
+export function authHeaders(scope: SessionScope = "user") {
   if (typeof window === "undefined") return {};
-  const token = window.localStorage.getItem("tiphouse_access_token");
+  const token = getSession(scope).accessToken;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

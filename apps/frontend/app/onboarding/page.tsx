@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AxiosError } from "axios";
 import { AuthGate } from "@/components/AuthGate";
 import { api, authHeaders } from "@/lib/api";
-import { clearSession, userCacheKey } from "@/lib/session";
+import { clearSession, setSessionValue, userCacheKey } from "@/lib/session";
 import { useAppPreferences } from "@/lib/app-preferences";
 
 type Profile = {
@@ -74,7 +74,7 @@ export default function CreatorOnboardingPage() {
       const page = data?.page ?? { slug, displayName, handle: `@${slug}` };
       localStorage.setItem(userCacheKey("donation_slug"), page.slug);
       localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));
-      localStorage.setItem("tiphouse_creator_setup_completed", "true");
+      setSessionValue("user", "creator_setup_completed", "true");
       window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: page }));
       router.replace("/dashboard?setup=done");
     } catch (caught) {
@@ -85,7 +85,7 @@ export default function CreatorOnboardingPage() {
   }
 
   function backToLogin() {
-    clearSession();
+    clearSession("user");
     router.replace("/login");
   }
 

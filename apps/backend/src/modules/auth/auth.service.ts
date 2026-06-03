@@ -21,9 +21,22 @@ type StreamlabsOAuthState = {
   userId?: string;
 };
 
+type StreamlabsLoginExchange = {
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    role: string;
+    accountStatus: string;
+    creatorSetupCompleted: boolean;
+  };
+  tokens: { accessToken: string; refreshToken: string };
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly pendingStreamlabsLogins = new Map<string, { expiresAt: number; payload: StreamlabsLoginExchange }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -135,17 +148,19 @@ export class AuthService {
       }
       const user = await this.upsertStreamlabsUser(streamlabsUser, token);
       const tokens = await this.signTokens(user.id, user.email, user.role);
+      const exchangeCode = this.createStreamlabsExchangeCode({
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          accountStatus: user.accountStatus,
+          creatorSetupCompleted: Boolean(user.creatorSetupCompleted),
+        },
+        tokens,
+      });
       const redirect = new URL("/streamlabs/callback", frontendUrl);
-      redirect.hash = new URLSearchParams({
-        accessToken: tokens.accessToken,
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        accountStatus: user.accountStatus,
-        creatorSetupCompleted: user.creatorSetupCompleted ? "true" : "false",
-        onboardingRequired: !(user as any).creatorSetupCompleted ? "true" : "false",
-      }).toString();
+      redirect.searchParams.set("code", exchangeCode);
       return res.redirect(redirect.toString());
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Streamlabs login failed";
@@ -155,6 +170,16 @@ export class AuthService {
       redirect.searchParams.set("reason", this.publicStreamlabsError(reason));
       return res.redirect(redirect.toString());
     }
+  }
+
+  exchangeStreamlabsLogin(code: string) {
+    if (!code) throw new UnauthorizedException("Missing Streamlabs login code");
+    const entry = this.pendingStreamlabsLogins.get(code);
+    this.pendingStreamlabsLogins.delete(code);
+    if (!entry || entry.expiresAt < Date.now()) {
+      throw new UnauthorizedException("Invalid or expired Streamlabs login code");
+    }
+    return entry.payload;
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {
@@ -388,6 +413,19 @@ export class AuthService {
 
   private hashResetToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private createStreamlabsExchangeCode(payload: StreamlabsLoginExchange) {
+    const now = Date.now();
+    for (const [code, entry] of this.pendingStreamlabsLogins.entries()) {
+      if (entry.expiresAt < now) this.pendingStreamlabsLogins.delete(code);
+    }
+    const code = randomBytes(24).toString("hex");
+    this.pendingStreamlabsLogins.set(code, {
+      expiresAt: now + 60 * 1000,
+      payload,
+    });
+    return code;
   }
 
   private publicStreamlabsError(reason: string) {

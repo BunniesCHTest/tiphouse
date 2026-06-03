@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { saveSession } from "@/lib/session";
 
 function isLocalhost() {
   return typeof window !== "undefined" && ["127.0.0.1", "localhost"].includes(window.location.hostname);
@@ -24,15 +25,11 @@ export default function AdminLoginPage() {
         password: form.get("password"),
       });
       if (data.user.role !== "ADMIN" && data.user.role !== "ACCOUNTING") throw new Error("not admin");
-      localStorage.setItem("tiphouse_access_token", data.tokens.accessToken);
-      localStorage.setItem("tiphouse_user_id", data.user.id);
-      localStorage.setItem("tiphouse_role", data.user.role);
-      localStorage.setItem("tiphouse_account_status", data.user.accountStatus);
+      saveSession(data.user, data.tokens.accessToken, "admin");
       router.push(data.user.passwordMustChange ? "/control-admin/change-password" : "/control-admin");
     } catch {
       if (isLocalhost() && form.get("username") === "Test" && form.get("password") === "Abc@1234") {
-        localStorage.setItem("tiphouse_access_token", "local-admin-token");
-        localStorage.setItem("tiphouse_role", "ADMIN");
+        saveSession({ id: "local-admin", role: "ADMIN", accountStatus: "APPROVED", creatorSetupCompleted: true }, "local-admin-token", "admin");
         router.push("/control-admin");
         return;
       }

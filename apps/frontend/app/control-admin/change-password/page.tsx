@@ -31,7 +31,7 @@ export default function AdminChangePasswordPage() {
 
     setSaving(true);
     try {
-      await api.post("/auth/change-password", { oldPassword, newPassword, confirmPassword }, { headers: authHeaders() });
+      await api.post("/auth/change-password", { oldPassword, newPassword, confirmPassword }, { headers: authHeaders("admin") });
       router.replace("/control-admin");
     } catch {
       setError("เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาตรวจสอบรหัสผ่านเก่า");

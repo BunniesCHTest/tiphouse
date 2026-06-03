@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, authHeaders } from "@/lib/api";
-import { clearSession, userCacheKey } from "@/lib/session";
+import { clearSession, getSession, setSessionValue, userCacheKey } from "@/lib/session";
 import { useAppPreferences } from "@/lib/app-preferences";
 
 export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
@@ -16,10 +16,11 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   const [donationSlug, setDonationSlug] = useState("bunniesch");
 
   useEffect(() => {
-    const token = localStorage.getItem("tiphouse_access_token");
-    const storedRole = localStorage.getItem("tiphouse_role") ?? "";
-    const storedStatus = localStorage.getItem("tiphouse_account_status") ?? "";
-    const storedSetupCompleted = localStorage.getItem("tiphouse_creator_setup_completed") === "true";
+    const session = getSession("user");
+    const token = session.accessToken;
+    const storedRole = session.role;
+    const storedStatus = session.accountStatus;
+    const storedSetupCompleted = session.creatorSetupCompleted;
     setLoggedIn(Boolean(token));
     setRole(storedRole);
     setApproved(storedRole === "ADMIN" || (storedStatus === "APPROVED" && storedSetupCompleted));
@@ -33,9 +34,9 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         const nextStatus = res.data?.accountStatus ?? storedStatus;
         const nextSlug = res.data?.page?.slug;
         const creatorSetupCompleted = Boolean(res.data?.creatorSetupCompleted);
-        localStorage.setItem("tiphouse_role", nextRole);
-        localStorage.setItem("tiphouse_account_status", nextStatus);
-        localStorage.setItem("tiphouse_creator_setup_completed", creatorSetupCompleted ? "true" : "false");
+        setSessionValue("user", "role", nextRole);
+        setSessionValue("user", "account_status", nextStatus);
+        setSessionValue("user", "creator_setup_completed", creatorSetupCompleted ? "true" : "false");
         setRole(nextRole);
         setApproved(nextRole === "ADMIN" || (nextStatus === "APPROVED" && creatorSetupCompleted));
         if (nextSlug) {
@@ -54,7 +55,7 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   }, []);
 
   function logout() {
-    clearSession();
+    clearSession("user");
     setLoggedIn(false);
     setRole("");
     setApproved(false);

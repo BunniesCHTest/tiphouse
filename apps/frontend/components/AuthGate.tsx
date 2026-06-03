@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { clearSession } from "@/lib/session";
+import { clearSession, getSession } from "@/lib/session";
 
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "tiphouse_last_activity";
@@ -16,11 +16,12 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("tiphouse_access_token");
-    const role = localStorage.getItem("tiphouse_role");
-    const accountStatus = localStorage.getItem("tiphouse_account_status");
-    const creatorSetupCompleted = localStorage.getItem("tiphouse_creator_setup_completed") === "true";
-    const isAllowedRole = Boolean(token) && (!admin || role === "ADMIN" || role === "ACCOUNTING");
+    const session = getSession(admin ? "admin" : "user");
+    const token = session.accessToken;
+    const role = session.role;
+    const accountStatus = session.accountStatus;
+    const creatorSetupCompleted = session.creatorSetupCompleted;
+    const isAllowedRole = Boolean(token) && (admin ? role === "ADMIN" || role === "ACCOUNTING" : role === "USER");
     const isApproved = admin || allowPending || accountStatus === "APPROVED";
     if (token && !admin && role === "USER" && !creatorSetupCompleted && pathname !== "/onboarding") {
       router.replace("/onboarding");
@@ -38,7 +39,7 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
     const verify = () => {
       const lastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || Date.now());
       if (Date.now() - lastActivity >= INACTIVITY_TIMEOUT_MS) {
-        clearSession();
+        clearSession(admin ? "admin" : "user");
         localStorage.removeItem(LAST_ACTIVITY_KEY);
         router.replace(loginPath);
       }
