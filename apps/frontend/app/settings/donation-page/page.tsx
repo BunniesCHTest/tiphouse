@@ -34,6 +34,8 @@ const defaults: PageSettings = {
   minAmount: 20,
 };
 
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
 function readFileAsDataUrl(file: File | null) {
   return new Promise<string | undefined>((resolve, reject) => {
     if (!file) return resolve(undefined);
@@ -42,6 +44,12 @@ function readFileAsDataUrl(file: File | null) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function validateImageFile(file: File | null, label: string) {
+  if (file && file.size > MAX_IMAGE_SIZE) {
+    throw new Error(`${label} ต้องมีขนาดไม่เกิน 5MB`);
+  }
 }
 
 function errorMessage(error: unknown) {
@@ -58,6 +66,8 @@ export default function DonationPageSettings() {
   const [settings, setSettings] = useState<PageSettings>(defaults);
   const [bannerPreview, setBannerPreview] = useState("");
   const [backgroundPreview, setBackgroundPreview] = useState("");
+  const [bannerInputKey, setBannerInputKey] = useState(0);
+  const [backgroundInputKey, setBackgroundInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<SaveStatus | null>(null);
 
@@ -93,11 +103,26 @@ export default function DonationPageSettings() {
     const form = new FormData(event.currentTarget);
     const bannerFile = form.get("bannerFile") instanceof File ? (form.get("bannerFile") as File) : null;
     const backgroundFile = form.get("backgroundFile") instanceof File ? (form.get("backgroundFile") as File) : null;
-    const bannerUrl = (await readFileAsDataUrl(bannerFile && bannerFile.size ? bannerFile : null)) ?? settings.bannerUrl;
-    const donationBackgroundUrl = (await readFileAsDataUrl(backgroundFile && backgroundFile.size ? backgroundFile : null)) ?? settings.donationBackgroundUrl;
+    let bannerUrl = settings.bannerUrl;
+    let donationBackgroundUrl = settings.donationBackgroundUrl;
+    try {
+      validateImageFile(bannerFile && bannerFile.size ? bannerFile : null, "Banner");
+      validateImageFile(backgroundFile && backgroundFile.size ? backgroundFile : null, "BG หน้าโดเนท");
+      bannerUrl = (await readFileAsDataUrl(bannerFile && bannerFile.size ? bannerFile : null)) ?? settings.bannerUrl;
+      donationBackgroundUrl = (await readFileAsDataUrl(backgroundFile && backgroundFile.size ? backgroundFile : null)) ?? settings.donationBackgroundUrl;
+    } catch (caught) {
+      setStatus({
+        type: "error",
+        title: t("บันทึกไม่สำเร็จ", "Save Failed"),
+        message: caught instanceof Error ? caught.message : errorMessage(caught),
+      });
+      setSaving(false);
+      return;
+    }
+    const handle = String(form.get("handle") ?? "").trim().slice(0, 20);
     const payload = {
       displayName: String(form.get("displayName") ?? "").trim(),
-      handle: String(form.get("handle") ?? "").trim(),
+      handle,
       slug: String(form.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20),
       quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
       bannerUrl,
@@ -105,7 +130,7 @@ export default function DonationPageSettings() {
       minAmount: Number(form.get("minAmount") ?? defaults.minAmount),
       theme: {
         quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
-        quicklinkText: String(form.get("handle") ?? "").trim(),
+        quicklinkText: handle,
         donationBackgroundUrl,
       },
     };
@@ -147,6 +172,18 @@ export default function DonationPageSettings() {
     setBackgroundPreview(URL.createObjectURL(file));
   }
 
+  function clearBanner() {
+    setSettings((current) => ({ ...current, bannerUrl: "" }));
+    setBannerPreview("");
+    setBannerInputKey((key) => key + 1);
+  }
+
+  function clearBackground() {
+    setSettings((current) => ({ ...current, donationBackgroundUrl: "" }));
+    setBackgroundPreview("");
+    setBackgroundInputKey((key) => key + 1);
+  }
+
   return (
     <AuthGate>
       <Nav />
@@ -169,7 +206,11 @@ export default function DonationPageSettings() {
         <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
           <label>{t("ชื่อครีเอเตอร์", "Creator Name")}<input className="input mt-2" name="displayName" value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value })} required /></label>
           <div className="grid gap-4 md:grid-cols-2">
-            <label>Handle<input className="input mt-2" name="handle" value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value })} required /></label>
+            <label>
+              Handle
+              <input className="input mt-2" name="handle" maxLength={20} value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value.slice(0, 20) })} required />
+              <span className="mt-2 block text-sm text-white/60">{settings.handle.length}/20</span>
+            </label>
             <label>Quicklink URL<input className="input mt-2" name="quicklinkUrl" value={settings.quicklinkUrl} onChange={(event) => setSettings({ ...settings, quicklinkUrl: event.target.value })} placeholder="https://www.twitch.tv/..." /></label>
           </div>
           <label>
@@ -180,14 +221,24 @@ export default function DonationPageSettings() {
           <div>
             <label className="font-bold">{t("รูป Banner", "Banner Image")}</label>
             <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 640 px, ไฟล์ JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 640 px, JPG/PNG/WebP, up to 5MB.")}</p>
-            <input className="input mt-2" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBannerChange} />
-            {bannerPreview && <img alt="Banner preview" src={bannerPreview} className="mt-3 h-44 w-full rounded-lg object-cover" />}
+            <input key={bannerInputKey} className="input mt-2" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBannerChange} />
+            {bannerPreview && (
+              <div className="relative mt-3">
+                <img alt="Banner preview" src={bannerPreview} className="h-44 w-full rounded-lg object-cover" />
+                <button className="btn absolute right-3 top-3 h-10 min-h-10 px-3 text-coral" type="button" aria-label="Delete banner image" onClick={clearBanner}>×</button>
+              </div>
+            )}
           </div>
           <div>
             <label className="font-bold">BG หน้าโดเนท</label>
             <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 1080 px สำหรับพื้นหลังส่วนเนื้อหาด้านล่าง Banner, JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 1080 px for the content background below the banner, JPG/PNG/WebP, up to 5MB.")}</p>
-            <input className="input mt-2" name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBackgroundChange} />
-            {backgroundPreview && <img alt="Donation background preview" src={backgroundPreview} className="mt-3 h-44 w-full rounded-lg object-cover" />}
+            <input key={backgroundInputKey} className="input mt-2" name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBackgroundChange} />
+            {backgroundPreview && (
+              <div className="relative mt-3">
+                <img alt="Donation background preview" src={backgroundPreview} className="h-44 w-full rounded-lg object-cover" />
+                <button className="btn absolute right-3 top-3 h-10 min-h-10 px-3 text-coral" type="button" aria-label="Delete donation background image" onClick={clearBackground}>×</button>
+              </div>
+            )}
           </div>
           <label>{t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}<input className="input mt-2" name="minAmount" type="number" min="1" value={settings.minAmount} onChange={(event) => setSettings({ ...settings, minAmount: Number(event.target.value) })} required /></label>
           <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>

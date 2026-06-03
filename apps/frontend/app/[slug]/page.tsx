@@ -75,7 +75,7 @@ function hasBlockedWord(value: string) {
 
 export default function DonatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const { t } = useAppPreferences();
+  const { language, t, toggleLanguage } = useAppPreferences();
   const [page, setPage] = useState<PageData | null>(null);
   const [qr, setQr] = useState<QrState | null>(null);
   const [error, setError] = useState("");
@@ -195,7 +195,42 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     document.getElementById("top-donator-rank")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  if (!page) return <main className="grid min-h-screen place-items-center">{error || "Loading..."}</main>;
+  if (!page && error) return <main className="grid min-h-screen place-items-center p-6 text-center text-coral">{error}</main>;
+
+  if (!page) {
+    return (
+      <main className="min-h-screen bg-ink">
+        <section className="grid min-h-[45vh] content-end bg-white/5 p-6">
+          <div className="mx-auto flex w-[min(1100px,100%)] items-end gap-4">
+            <div className="size-20 animate-pulse rounded-2xl bg-white/10" />
+            <div className="grid flex-1 gap-3">
+              <div className="h-10 w-72 max-w-full animate-pulse rounded-xl bg-white/10" />
+              <div className="h-5 w-48 animate-pulse rounded-lg bg-white/10" />
+            </div>
+          </div>
+        </section>
+        <section className="mx-auto grid w-[min(1180px,calc(100%-2rem))] gap-6 py-8 lg:grid-cols-[430px_1fr]">
+          <div className="phone-frame">
+            <div className="phone-screen grid gap-4 p-5">
+              <div className="h-28 animate-pulse rounded-2xl bg-white/10" />
+              <div className="draft-panel grid gap-3">
+                <div className="h-5 w-36 animate-pulse rounded bg-white/10" />
+                <div className="grid grid-cols-3 gap-2">
+                  {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-12 animate-pulse rounded-xl bg-white/10" />)}
+                </div>
+              </div>
+              <div className="draft-panel h-28 animate-pulse" />
+              <div className="draft-panel h-32 animate-pulse" />
+            </div>
+          </div>
+          <aside className="draft-band grid content-start gap-4 p-5">
+            <div className="h-7 w-40 animate-pulse rounded bg-white/10" />
+            {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-12 animate-pulse rounded-xl bg-white/10" />)}
+          </aside>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -206,6 +241,9 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         backgroundSize: "cover",
       } : undefined}
     >
+      <button className="btn fixed right-4 top-4 z-30 bg-ink/80 backdrop-blur" type="button" onClick={toggleLanguage}>
+        TH/ENG
+      </button>
       <section
         className="grid min-h-[45vh] content-end bg-cover bg-center p-6"
         style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.bannerUrl ?? defaultPage.bannerUrl})` }}
@@ -406,7 +444,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                     <span className="text-xl" aria-hidden="true">{rankMedals[index]}</span>
                     <span className="truncate">{item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
                   </strong>
-                  <strong className="shrink-0">เธฟ{item.amount.toLocaleString("th-TH")}</strong>
+                  <strong className="shrink-0">฿{item.amount.toLocaleString(language === "en" ? "en-US" : "th-TH")}</strong>
                 </div>
               ))}
               {!donorRank.length && <p className="rounded-xl border border-sky/20 bg-white/5 p-3 text-sm text-white/55">เธขเธฑเธเนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ Top Tippers เธเธฒเธ Streamlabs</p>}

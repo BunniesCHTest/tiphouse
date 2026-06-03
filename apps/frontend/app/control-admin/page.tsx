@@ -30,7 +30,7 @@ type UserRow = {
     payoutMethod?: string | null;
     kycStatus?: string | null;
   } | null;
-  page?: { slug: string; displayName: string; minAmount?: number; goalAmount?: number } | null;
+  page?: { slug: string; displayName: string; handle?: string | null; minAmount?: number; goalAmount?: number } | null;
   _count?: { donations: number; approvals: number };
 };
 
@@ -64,6 +64,7 @@ type ApprovalRow = {
 type AdminTab = "users" | "transactions" | "approvals";
 
 const TRANSACTION_PAGE_SIZE = 10;
+const APPROVAL_PAGE_SIZE = 10;
 
 const adminTabs: Array<[AdminTab, string]> = [
   ["users", "จัดการ User"],
@@ -192,6 +193,8 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
   const [adminUserId, setAdminUserId] = useState("");
   const [transactionPage, setTransactionPage] = useState(1);
+  const [approvalStatus, setApprovalStatus] = useState("PENDING");
+  const [approvalPage, setApprovalPage] = useState(1);
 
   const canManageUsers = role === "ADMIN";
   const tabs: Array<[AdminTab, string]> = canManageUsers
@@ -240,9 +243,9 @@ export default function AdminPage() {
     }
   }
 
-  async function loadApprovals() {
+  async function loadApprovals(nextStatus = approvalStatus) {
     try {
-      const { data } = await api.get("/admin/approvals", { headers: authHeaders("admin") });
+      const { data } = await api.get("/admin/approvals", { headers: authHeaders("admin"), params: { status: nextStatus || undefined } });
       setApprovals(asArray<ApprovalRow>(data));
     } catch (error) {
       setApprovals([]);
@@ -259,7 +262,7 @@ export default function AdminPage() {
     setMessage("");
     if (active === "users" && canManageUsers) await loadUsers(nextQuery);
     if (active === "transactions") await loadTransactions(nextQuery, nextStatus);
-    if (active === "approvals") await loadApprovals();
+    if (active === "approvals") await loadApprovals(approvalStatus);
   }
 
   useEffect(() => {
@@ -300,6 +303,7 @@ export default function AdminPage() {
         page: {
           slug: form.get("slug"),
           displayName: form.get("displayName"),
+          handle: form.get("handle"),
         },
       },
       { headers: authHeaders("admin") },
@@ -375,12 +379,36 @@ export default function AdminPage() {
     (safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE,
     safeTransactionPage * TRANSACTION_PAGE_SIZE,
   );
+  const approvalQuery = query.trim().toLowerCase();
+  const filteredApprovals = useMemo(() => approvals.filter((row) => {
+    if (!approvalQuery) return true;
+    const detail = approvalDetails(row);
+    return [
+      row.type,
+      row.status,
+      row.user.username,
+      row.user.email,
+      row.requestedEmail,
+      detail.oldUsername,
+      detail.newUsername,
+      detail.oldEmail,
+      detail.newEmail,
+    ].some((value) => String(value ?? "").toLowerCase().includes(approvalQuery));
+  }), [approvals, approvalQuery]);
+  const totalApprovalPages = Math.max(1, Math.ceil(filteredApprovals.length / APPROVAL_PAGE_SIZE));
+  const safeApprovalPage = Math.min(approvalPage, totalApprovalPages);
+  const pagedApprovals = filteredApprovals.slice(
+    (safeApprovalPage - 1) * APPROVAL_PAGE_SIZE,
+    safeApprovalPage * APPROVAL_PAGE_SIZE,
+  );
 
   async function clearFiltersNow() {
     setQuery("");
     setStatus("");
     setMessage("");
     setTransactionPage(1);
+    setApprovalStatus("PENDING");
+    setApprovalPage(1);
     await refresh("", "");
   }
 
@@ -442,7 +470,24 @@ export default function AdminPage() {
               <option value="REVIEW">REVIEW</option>
             </select>
           )}
-          <button className="btn" onClick={() => { setTransactionPage(1); refresh(query, status).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ")); }} type="button">ค้นหา</button>
+          {active === "approvals" && (
+            <select
+              className="input max-w-48"
+              value={approvalStatus}
+              onChange={(event) => {
+                const nextStatus = event.target.value;
+                setApprovalStatus(nextStatus);
+                setApprovalPage(1);
+                loadApprovals(nextStatus).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"));
+              }}
+            >
+              <option value="">ALL</option>
+              <option value="PENDING">PENDING</option>
+              <option value="APPROVED">APPROVED</option>
+              <option value="REJECTED">REJECTED</option>
+            </select>
+          )}
+          <button className="btn" onClick={() => { setTransactionPage(1); setApprovalPage(1); refresh(query, status).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ")); }} type="button" aria-label="Search">🔍</button>
           <button className="btn" onClick={() => refresh(query, status).catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button" title="Refresh">↻</button>
           <button className="btn" onClick={() => clearFiltersNow().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">CLEAR</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
@@ -575,7 +620,7 @@ export default function AdminPage() {
                 <tr><th>Type</th><th>User</th><th>ข้อมูลใหม่</th><th>Status</th><th>Created</th><th>Info</th><th></th></tr>
               </thead>
               <tbody>
-                {approvals.map((row) => (
+                {pagedApprovals.map((row) => (
                   <tr key={row.id} className="border-t border-white/10">
                     <td className="py-3 font-bold">{row.type}</td>
                     <td>{row.user.username}</td>
@@ -589,8 +634,22 @@ export default function AdminPage() {
                     </td>
                   </tr>
                 ))}
+                {!pagedApprovals.length && (
+                  <tr><td className="p-4 text-white/45" colSpan={7}>ไม่มีคำขออนุมัติในเงื่อนไขนี้</td></tr>
+                )}
               </tbody>
             </table>
+            {filteredApprovals.length > APPROVAL_PAGE_SIZE && (
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-4 text-sm text-white/70">
+                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeApprovalPage <= 1} onClick={() => setApprovalPage((page) => Math.max(1, page - 1))}>Previous</button>
+                <select className="input h-9 w-32 py-1 text-sm" value={safeApprovalPage} onChange={(event) => setApprovalPage(Number(event.target.value))}>
+                  {Array.from({ length: totalApprovalPages }, (_, index) => (
+                    <option key={index + 1} value={index + 1}>Page {index + 1}</option>
+                  ))}
+                </select>
+                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeApprovalPage >= totalApprovalPages} onClick={() => setApprovalPage((page) => Math.min(totalApprovalPages, page + 1))}>Next</button>
+              </div>
+            )}
           </section>
         )}
 
@@ -626,12 +685,13 @@ export default function AdminPage() {
               {selectedUser.email !== undefined && (
                 <form onSubmit={saveUser} className="grid gap-4 md:grid-cols-2">
                   <label>Username<input className="input mt-2" name="username" defaultValue={selectedUser.username} required /></label>
+                  <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
                   <label>Email<input className="input mt-2" name="email" type="email" defaultValue={selectedUser.email} required /></label>
                   <label>Email แจ้งเตือนโดเนท<input className="input mt-2" name="donationNotificationEmail" type="email" defaultValue={selectedUser.donationNotificationEmail ?? ""} /></label>
+                  <label>Handle<input className="input mt-2" name="handle" maxLength={20} defaultValue={selectedUser.page?.handle ?? ""} /></label>
+                  <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
                   <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option><option>ACCOUNTING</option></select></label>
                   <label>Status<select className="input mt-2" name="accountStatus" defaultValue={displayUserStatus(selectedUser)}><option>ACTIVE</option><option>SUSPENDED</option><option>PENDING</option></select></label>
-                  <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
-                  <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
                   <button className="btn btn-primary md:col-span-2" type="submit">บันทึกข้อมูล User</button>
                 </form>
               )}

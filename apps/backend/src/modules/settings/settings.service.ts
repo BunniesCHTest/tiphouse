@@ -17,11 +17,19 @@ export class SettingsService {
     return this.prisma.payoutAccount.findUnique({ where: { userId } });
   }
 
-  getProfile(userId: string) {
-    return this.prisma.user.findUnique({
+  async getProfile(userId: string) {
+    const [profile, approvals] = await Promise.all([
+      this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, username: true, email: true, role: true, accountStatus: true, creatorSetupCompleted: true, donationNotificationEmail: true, page: true },
-    });
+      }),
+      this.prisma.approvalRequest.findMany({
+        where: { userId, type: "EMAIL_CHANGE" },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+    ]);
+    return profile ? { ...profile, approvals } : null;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

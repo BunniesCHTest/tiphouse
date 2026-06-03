@@ -285,7 +285,7 @@ export class AdminController {
     if (request.type === "REGISTER") {
       await this.prisma.user.update({ where: { id: request.userId }, data: { accountStatus: "APPROVED" } });
     }
-    if (request.type === "EMAIL_CHANGE" && request.requestedEmail) {
+    if (request.type === "EMAIL_CHANGE") {
       const detail = this.parseApprovalNote(request.note);
       const data: any = { pendingEmail: null };
       if (detail.newUsername) {

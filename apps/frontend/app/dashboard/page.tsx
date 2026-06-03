@@ -93,6 +93,18 @@ function groupKey(date: Date, viewBy: ViewBy) {
   return toDateInput(date);
 }
 
+function formatGroupLabel(label: string, viewBy: ViewBy, language: string) {
+  if (viewBy === "week") {
+    const match = label.match(/^(\d{4})-W(\d{2})$/);
+    if (match) return language === "en" ? `Week ${Number(match[2])}, ${match[1]}` : `สัปดาห์ ${Number(match[2])} / ${match[1]}`;
+  }
+  if (viewBy === "month") {
+    const [year, month] = label.split("-");
+    if (year && month) return `${month}/${year}`;
+  }
+  return label;
+}
+
 function triggerOverlayAgain(item: HistoryRow) {
   localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({
     donorName: item.anonymous ? "บุคคลนิรนาม" : item.tipper,
@@ -104,13 +116,14 @@ function triggerOverlayAgain(item: HistoryRow) {
 }
 
 export default function DashboardPage() {
-  const { t } = useAppPreferences();
+  const { language, t } = useAppPreferences();
   const [data, setData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [viewBy, setViewBy] = useState<ViewBy>("day");
   const [fromDate, setFromDate] = useState(defaultFromDate);
   const [toDate, setToDate] = useState(defaultToDate);
   const [historyPage, setHistoryPage] = useState(1);
+  const [transactionPage, setTransactionPage] = useState(1);
 
   useEffect(() => {
     api.get("/dashboard", { headers: authHeaders() }).then((res) => setData(res.data)).catch(() => setData(null));
@@ -156,14 +169,18 @@ export default function DashboardPage() {
     });
   }, [allRows, fromDate, toDate]);
 
-  const visibleRows = filteredRows.length ? filteredRows : allRows;
+  const visibleRows = filteredRows;
   const revenue = visibleRows.reduce((sum, item) => sum + item.amount, 0);
   const highestDonation = visibleRows.reduce((max, item) => Math.max(max, item.amount), 0);
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const pagedRows = visibleRows.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+  const transactionPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+  const safeTransactionPage = Math.min(transactionPage, transactionPages);
+  const pagedTransactionRows = visibleRows.slice((safeTransactionPage - 1) * PAGE_SIZE, safeTransactionPage * PAGE_SIZE);
 
   useEffect(() => {
     setHistoryPage(1);
+    setTransactionPage(1);
   }, [fromDate, toDate, viewBy, data]);
 
   const bars = useMemo<BarRow[]>(() => {
@@ -196,6 +213,23 @@ export default function DashboardPage() {
     setToDate(defaultToDate());
     setViewBy("day");
     setHistoryPage(1);
+    setTransactionPage(1);
+  }
+
+  async function replayDashboardAlert(item: HistoryRow) {
+    try {
+      await api.post(
+        "/settings/overlay/test",
+        {
+          testDonorName: item.anonymous ? "บุคคลนิรนาม" : item.tipper,
+          testAmount: String(item.amount),
+          testMessage: item.message || "",
+        },
+        { headers: authHeaders() },
+      );
+    } catch {
+      triggerOverlayAgain(item);
+    }
   }
 
   return (
@@ -242,14 +276,14 @@ export default function DashboardPage() {
                 </div>
               </div>
               {!filteredRows.length && allRows.length > 0 && (
-                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก จึงแสดงรายการล่าสุดแทน", "No data in the selected range, showing latest records instead.")}</p>
+                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก", "No data in the selected date range")}</p>
               )}
               <div className="mt-5 flex h-72 items-end gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {bars.length ? bars.map((bar) => (
                   <div key={bar.label} className="flex h-full flex-1 min-w-0 flex-col justify-end gap-2 text-center">
                     <span className="truncate text-xs font-bold text-white/70">{formatBaht(bar.value)}</span>
                     <div className="rounded-t-xl bg-gradient-to-t from-mint to-coral" style={{ height: `${bar.height}%` }} />
-                    <span className="truncate text-[11px] text-white/50">{bar.label}</span>
+                    <span className="truncate text-[11px] text-white/50">{formatGroupLabel(bar.label, viewBy, language)}</span>
                   </div>
                 )) : <div className="grid h-full w-full place-items-center text-white/45">{t("ยังไม่มีข้อมูลในช่วงวันที่นี้", "No data in this date range")}</div>}
               </div>
@@ -291,7 +325,7 @@ export default function DashboardPage() {
                       <td className="px-3 py-3 text-right">{formatBaht(item.amount)}</td>
                       <td className="px-3 py-3">{item.message || "-"}</td>
                       <td className="rounded-r-xl px-3 py-3 text-center">
-                        <button className="btn h-9 min-h-9 px-3 py-1 text-xs" type="button" onClick={() => triggerOverlayAgain(item)}>Alert ซ้ำ</button>
+                        <button className="btn h-9 min-h-9 px-3 py-1 text-xs" type="button" onClick={() => replayDashboardAlert(item)}>Alert ซ้ำ</button>
                       </td>
                     </tr>
                   ))}
@@ -318,7 +352,7 @@ export default function DashboardPage() {
             <table className="w-full min-w-[860px] text-left">
               <thead className="text-white/60"><tr><th className="p-2">{t("วันที่", "When")}</th><th>{t("รายการ", "Method")}</th><th>{t("เลขที่อ้างอิง", "Reference")}</th><th>{t("จำนวนเงิน", "Amount")}</th></tr></thead>
               <tbody>
-                {visibleRows.map((item) => (
+                {pagedTransactionRows.map((item) => (
                   <tr key={item.id} className="border-t border-white/10">
                     <td className="p-2">{formatDateTime(item)}</td>
                     <td>{item.provider}</td>
@@ -329,6 +363,17 @@ export default function DashboardPage() {
                 {!visibleRows.length && <tr><td className="p-4 text-white/45" colSpan={4}>{t("ยังไม่มีรายการธุรกรรม", "No transactions yet")}</td></tr>}
               </tbody>
             </table>
+            {visibleRows.length > PAGE_SIZE && (
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-4 text-sm text-white/70">
+                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeTransactionPage <= 1} onClick={() => setTransactionPage((page) => Math.max(1, page - 1))}>Previous</button>
+                <select className="input h-9 w-32 py-1 text-sm" value={safeTransactionPage} onChange={(event) => setTransactionPage(Number(event.target.value))}>
+                  {Array.from({ length: transactionPages }, (_, index) => (
+                    <option key={index + 1} value={index + 1}>Page {index + 1}</option>
+                  ))}
+                </select>
+                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeTransactionPage >= transactionPages} onClick={() => setTransactionPage((page) => Math.min(transactionPages, page + 1))}>Next</button>
+              </div>
+            )}
           </section>
         )}
       </main>

@@ -11,8 +11,8 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   app.useLogger(app.get(Logger));
-  app.use(json({ limit: "10mb" }));
-  app.use(urlencoded({ extended: true, limit: "10mb" }));
+  app.use(json({ limit: "20mb" }));
+  app.use(urlencoded({ extended: true, limit: "20mb" }));
   app.use(helmet());
   app.enableCors({
     origin: config.getOrThrow<string>("FRONTEND_URL"),
