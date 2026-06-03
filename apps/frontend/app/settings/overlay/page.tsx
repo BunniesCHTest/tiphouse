@@ -319,7 +319,7 @@ function fillGoalTemplate(value: string, settings: OverlaySettings, currentAmoun
 function previewDoc(settings: OverlaySettings, alert: TestAlert) {
   const imageHtml = settings.alertImageUrl ? `<img class="tiphouse-image" src="${settings.alertImageUrl}" alt="" />` : "";
   const replacements = settings.widgetHtml.replaceAll("{{imageUrl}}", settings.alertImageUrl ?? "").replaceAll("{{imageHtml}}", imageHtml);
-  return `<!doctype html><html><head><style>html,body{margin:0;background:transparent;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(replacements, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
+  return `<!doctype html><html><head><style>html,body{margin:0;background:#000;min-height:100%;display:grid;place-items:center}${fillTemplate(settings.widgetCss, alert)}</style></head><body>${fillTemplate(replacements, alert)}<script>${fillTemplate(settings.widgetJs, alert)}</script></body></html>`;
 }
 
 function goalPreviewDoc(settings: OverlaySettings) {

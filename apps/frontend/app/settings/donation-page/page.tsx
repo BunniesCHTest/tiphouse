@@ -14,6 +14,7 @@ type PageSettings = {
   handle: string;
   slug: string;
   quicklinkUrl: string;
+  donationBackgroundUrl?: string;
   bannerUrl?: string;
   minAmount: number;
 };
@@ -29,6 +30,7 @@ const defaults: PageSettings = {
   handle: "",
   slug: "",
   quicklinkUrl: "",
+  donationBackgroundUrl: "",
   minAmount: 20,
 };
 
@@ -55,6 +57,7 @@ export default function DonationPageSettings() {
   const { t } = useAppPreferences();
   const [settings, setSettings] = useState<PageSettings>(defaults);
   const [bannerPreview, setBannerPreview] = useState("");
+  const [backgroundPreview, setBackgroundPreview] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<SaveStatus | null>(null);
 
@@ -64,6 +67,7 @@ export default function DonationPageSettings() {
       const parsed = { ...defaults, ...JSON.parse(cached) };
       setSettings(parsed);
       if (parsed.bannerUrl) setBannerPreview(parsed.bannerUrl);
+      if (parsed.donationBackgroundUrl) setBackgroundPreview(parsed.donationBackgroundUrl);
     }
 
     api.get("/dashboard", { headers: authHeaders() }).then((res) => {
@@ -72,11 +76,13 @@ export default function DonationPageSettings() {
         ...defaults,
         ...res.data.page,
         quicklinkUrl: res.data.page?.theme?.quicklinkUrl ?? "",
+        donationBackgroundUrl: res.data.page?.theme?.donationBackgroundUrl ?? "",
       };
       setSettings(page);
       localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));
       localStorage.setItem(userCacheKey("donation_slug"), page.slug);
       if (page.bannerUrl) setBannerPreview(page.bannerUrl);
+      if (page.donationBackgroundUrl) setBackgroundPreview(page.donationBackgroundUrl);
     }).catch(() => undefined);
   }, []);
 
@@ -86,17 +92,21 @@ export default function DonationPageSettings() {
     setStatus(null);
     const form = new FormData(event.currentTarget);
     const bannerFile = form.get("bannerFile") instanceof File ? (form.get("bannerFile") as File) : null;
+    const backgroundFile = form.get("backgroundFile") instanceof File ? (form.get("backgroundFile") as File) : null;
     const bannerUrl = (await readFileAsDataUrl(bannerFile && bannerFile.size ? bannerFile : null)) ?? settings.bannerUrl;
+    const donationBackgroundUrl = (await readFileAsDataUrl(backgroundFile && backgroundFile.size ? backgroundFile : null)) ?? settings.donationBackgroundUrl;
     const payload = {
       displayName: String(form.get("displayName") ?? "").trim(),
       handle: String(form.get("handle") ?? "").trim(),
       slug: String(form.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20),
       quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
       bannerUrl,
+      donationBackgroundUrl,
       minAmount: Number(form.get("minAmount") ?? defaults.minAmount),
       theme: {
         quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
         quicklinkText: String(form.get("handle") ?? "").trim(),
+        donationBackgroundUrl,
       },
     };
 
@@ -108,6 +118,7 @@ export default function DonationPageSettings() {
       window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: savedPage }));
       setSettings(savedPage);
       if (savedPage.bannerUrl) setBannerPreview(savedPage.bannerUrl);
+      if (savedPage.donationBackgroundUrl) setBackgroundPreview(savedPage.donationBackgroundUrl);
       setStatus({
         type: "success",
         title: t("บันทึกสำเร็จ", "Saved"),
@@ -128,6 +139,12 @@ export default function DonationPageSettings() {
     const file = event.target.files?.[0];
     if (!file) return;
     setBannerPreview(URL.createObjectURL(file));
+  }
+
+  function onBackgroundChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBackgroundPreview(URL.createObjectURL(file));
   }
 
   return (
@@ -165,6 +182,12 @@ export default function DonationPageSettings() {
             <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 640 px, ไฟล์ JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 640 px, JPG/PNG/WebP, up to 5MB.")}</p>
             <input className="input mt-2" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBannerChange} />
             {bannerPreview && <img alt="Banner preview" src={bannerPreview} className="mt-3 h-44 w-full rounded-lg object-cover" />}
+          </div>
+          <div>
+            <label className="font-bold">BG หน้าโดเนท</label>
+            <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 1080 px สำหรับพื้นหลังส่วนเนื้อหาด้านล่าง Banner, JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 1080 px for the content background below the banner, JPG/PNG/WebP, up to 5MB.")}</p>
+            <input className="input mt-2" name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBackgroundChange} />
+            {backgroundPreview && <img alt="Donation background preview" src={backgroundPreview} className="mt-3 h-44 w-full rounded-lg object-cover" />}
           </div>
           <label>{t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}<input className="input mt-2" name="minAmount" type="number" min="1" value={settings.minAmount} onChange={(event) => setSettings({ ...settings, minAmount: Number(event.target.value) })} required /></label>
           <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>

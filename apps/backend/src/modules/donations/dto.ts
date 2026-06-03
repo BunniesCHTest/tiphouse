@@ -59,6 +59,10 @@ export class UpdateDonationPageDto {
   @IsOptional()
   quicklinkUrl?: string;
 
+  @IsString()
+  @IsOptional()
+  donationBackgroundUrl?: string;
+
   @IsInt()
   @Min(1)
   @IsOptional()

@@ -16,6 +16,7 @@ type PageData = {
   theme?: {
     quicklinkUrl?: string;
     quicklinkText?: string;
+    donationBackgroundUrl?: string;
   } | null;
 };
 
@@ -35,6 +36,7 @@ type DonorRank = {
 type DonateStep = "form" | "summary" | "qr" | "success";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
+const rankMedals = ["🥇", "🥈", "🥉"];
 const quickAmounts = [50, 100, 300, 500, 1000];
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
@@ -196,7 +198,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   if (!page) return <main className="grid min-h-screen place-items-center">{error || "Loading..."}</main>;
 
   return (
-    <main>
+    <main
+      style={page.theme?.donationBackgroundUrl ? {
+        backgroundImage: `linear-gradient(rgba(7,16,28,.82),rgba(7,16,28,.88)), url(${page.theme.donationBackgroundUrl})`,
+        backgroundAttachment: "fixed",
+        backgroundPosition: "center top",
+        backgroundSize: "cover",
+      } : undefined}
+    >
       <section
         className="grid min-h-[45vh] content-end bg-cover bg-center p-6"
         style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.bannerUrl ?? defaultPage.bannerUrl})` }}
@@ -208,9 +217,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           <div>
             <h1 className="mt-2 text-5xl font-black md:text-7xl">{page.displayName}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <p className="text-white/70">{page.handle}</p>
               {page.theme?.quicklinkUrl && (
-                <a className="btn min-h-9 px-3 py-1" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
+                <a className="text-base font-bold text-mint underline decoration-mint/50 underline-offset-4 hover:text-sky" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
                   {page.theme.quicklinkText || page.handle || "Quicklink"}
                 </a>
               )}
@@ -389,22 +397,22 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               </div>
             ))}
           </div>
-        </aside>
-      </section>
-      <section id="top-donator-rank" className="mx-auto w-[min(1180px,calc(100%-2rem))] pb-10">
-        <div className="draft-band p-5">
-          <h2 className="text-3xl font-black">Top Donator Rank</h2>
-          <p className="mt-3 text-sm text-white/65">ระบบ Rank ตามยอดโดเนทสูงสุด เลือกดูรายวัน รายเดือน หรือตลอดกาลได้</p>
-          <div className="mt-5 grid gap-3">
-            {donorRank.map((item, index) => (
-              <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-4 rounded-2xl border border-sky/20 bg-white/5 p-4">
-                <strong><span className="mr-2 text-mint">#{index + 1}</span>{item.anonymous ? THAI_ANONYMOUS : item.donorName}</strong>
-                <strong>฿{item.amount.toLocaleString("th-TH")}</strong>
-              </div>
-            ))}
-            {!donorRank.length && <p className="rounded-2xl border border-sky/20 bg-white/5 p-4 text-white/55">ยังไม่มีข้อมูล Top Tippers จาก Streamlabs</p>}
+          <div id="top-donator-rank" className="mt-2 border-t border-white/10 pt-4">
+            <h3 className="text-xl font-black">Top Donator Rank</h3>
+            <div className="mt-3 grid gap-2">
+              {donorRank.slice(0, 3).map((item, index) => (
+                <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-sky/20 bg-white/5 px-3 py-2">
+                  <strong className="flex min-w-0 items-center gap-2">
+                    <span className="text-xl" aria-hidden="true">{rankMedals[index]}</span>
+                    <span className="truncate">{item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
+                  </strong>
+                  <strong className="shrink-0">เธฟ{item.amount.toLocaleString("th-TH")}</strong>
+                </div>
+              ))}
+              {!donorRank.length && <p className="rounded-xl border border-sky/20 bg-white/5 p-3 text-sm text-white/55">เธขเธฑเธเนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ Top Tippers เธเธฒเธ Streamlabs</p>}
+            </div>
           </div>
-        </div>
+        </aside>
       </section>
     </main>
   );

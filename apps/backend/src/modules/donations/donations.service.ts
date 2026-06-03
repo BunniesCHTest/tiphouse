@@ -177,7 +177,7 @@ export class DonationsService {
 
   async updatePage(userId: string, dto: UpdateDonationPageDto) {
     await this.ensureApproved(userId);
-    const { quicklinkUrl, theme, ...pageFields } = dto;
+    const { donationBackgroundUrl, quicklinkUrl, theme, ...pageFields } = dto;
     if (dto.slug) {
       const slug = dto.slug.trim().toLowerCase();
       if (!/^[a-z0-9]{4,20}$/.test(slug)) {
@@ -197,6 +197,7 @@ export class DonationsService {
         ...currentTheme,
         ...(theme ?? {}),
         ...(quicklinkUrl !== undefined ? { quicklinkUrl } : {}),
+        ...(donationBackgroundUrl !== undefined ? { donationBackgroundUrl } : {}),
       } as Prisma.InputJsonValue,
     };
     return this.prisma.donationPage.update({ where: { userId }, data });

@@ -182,19 +182,23 @@ export class AdminController {
     this.requireStaff(user);
     const donation = await this.prisma.donation.findUniqueOrThrow({
       where: { id },
-      include: { user: { include: { overlay: true } } },
+      include: {
+        user: { include: { overlay: true } },
+        page: { include: { user: { include: { overlay: true } } } },
+      },
     });
-    if (!donation.user.overlay?.streamerKey) return { ok: false, message: "Creator has no overlay URL" };
-    this.overlay.emitPaidDonation(donation.user.overlay.streamerKey, {
+    const overlay = donation.page.user.overlay ?? donation.user.overlay;
+    if (!overlay?.streamerKey) return { ok: false, message: "Creator has no overlay URL" };
+    this.overlay.emitPaidDonation(overlay.streamerKey, {
       donorName: donation.anonymous ? "บุคคลนิรนาม" : donation.donorName,
       amount: donation.amount,
       message: donation.message,
       anonymous: donation.anonymous,
       settings: {
-        theme: donation.user.overlay.theme,
-        animation: donation.user.overlay.animation,
-        soundUrl: donation.user.overlay.soundUrl,
-        ttsEnabled: donation.user.overlay.ttsEnabled,
+        theme: overlay.theme,
+        animation: overlay.animation,
+        soundUrl: overlay.soundUrl,
+        ttsEnabled: overlay.ttsEnabled,
       },
     });
     return { ok: true };
