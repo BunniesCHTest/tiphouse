@@ -55,6 +55,10 @@ export class UpdateDonationPageDto {
   @IsOptional()
   donationAccountName?: string;
 
+  @IsString()
+  @IsOptional()
+  quicklinkUrl?: string;
+
   @IsInt()
   @Min(1)
   @IsOptional()

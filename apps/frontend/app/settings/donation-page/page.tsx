@@ -6,17 +6,16 @@ import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
 import { Nav } from "@/components/Nav";
 import { api, authHeaders } from "@/lib/api";
+import { useAppPreferences } from "@/lib/app-preferences";
 import { userCacheKey } from "@/lib/session";
 
 type PageSettings = {
   displayName: string;
   handle: string;
   slug: string;
-  donationAccountName?: string;
   quicklinkUrl: string;
   bannerUrl?: string;
   minAmount: number;
-  goalAmount: number;
 };
 
 type SaveStatus = {
@@ -31,7 +30,6 @@ const defaults: PageSettings = {
   slug: "",
   quicklinkUrl: "",
   minAmount: 20,
-  goalAmount: 5000,
 };
 
 function readFileAsDataUrl(file: File | null) {
@@ -54,6 +52,7 @@ function errorMessage(error: unknown) {
 }
 
 export default function DonationPageSettings() {
+  const { t } = useAppPreferences();
   const [settings, setSettings] = useState<PageSettings>(defaults);
   const [bannerPreview, setBannerPreview] = useState("");
   const [saving, setSaving] = useState(false);
@@ -88,26 +87,21 @@ export default function DonationPageSettings() {
     const form = new FormData(event.currentTarget);
     const bannerFile = form.get("bannerFile") instanceof File ? (form.get("bannerFile") as File) : null;
     const bannerUrl = (await readFileAsDataUrl(bannerFile && bannerFile.size ? bannerFile : null)) ?? settings.bannerUrl;
-    const payload: PageSettings = {
+    const payload = {
       displayName: String(form.get("displayName") ?? "").trim(),
       handle: String(form.get("handle") ?? "").trim(),
-      slug: String(form.get("slug") ?? "").trim().replace(/^\/+/, ""),
+      slug: String(form.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20),
       quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
-      donationAccountName: settings.donationAccountName || "TipHouse Donate",
       bannerUrl,
       minAmount: Number(form.get("minAmount") ?? defaults.minAmount),
-      goalAmount: Number(form.get("goalAmount") ?? defaults.goalAmount),
-    };
-    const savePayload = {
-      ...payload,
       theme: {
-        quicklinkUrl: payload.quicklinkUrl,
-        quicklinkText: payload.handle || payload.slug,
+        quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
+        quicklinkText: String(form.get("handle") ?? "").trim(),
       },
     };
 
     try {
-      const { data } = await api.patch("/settings/page", savePayload, { headers: authHeaders() });
+      const { data } = await api.patch("/settings/page", payload, { headers: authHeaders() });
       const savedPage = { ...payload, ...data, quicklinkUrl: data?.theme?.quicklinkUrl ?? payload.quicklinkUrl };
       localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(savedPage));
       localStorage.setItem(userCacheKey("donation_slug"), savedPage.slug);
@@ -116,13 +110,13 @@ export default function DonationPageSettings() {
       if (savedPage.bannerUrl) setBannerPreview(savedPage.bannerUrl);
       setStatus({
         type: "success",
-        title: "บันทึกสำเร็จ",
-        message: `ข้อมูลหน้าโดเนท /${savedPage.slug} ถูกบันทึกลง Database แล้ว`,
+        title: t("บันทึกสำเร็จ", "Saved"),
+        message: t(`ข้อมูลหน้าโดเนท /${savedPage.slug} ถูกบันทึกแล้ว`, `Donation page /${savedPage.slug} has been saved.`),
       });
     } catch (caught) {
       setStatus({
         type: "error",
-        title: "บันทึกไม่สำเร็จ",
+        title: t("บันทึกไม่สำเร็จ", "Save Failed"),
         message: errorMessage(caught),
       });
     } finally {
@@ -147,30 +141,33 @@ export default function DonationPageSettings() {
               <h2 className="mt-3 text-3xl font-black">{status.title}</h2>
               <p className="mt-2 text-white/65">{status.message}</p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                {status.type === "success" && <Link className="btn btn-primary" href={`/${settings.slug}`} target="_blank">เปิดหน้าโดเนท</Link>}
-                <button className="btn" type="button" onClick={() => setStatus(null)}>ปิด</button>
+                {status.type === "success" && <Link className="btn btn-primary" href={`/${settings.slug}`} target="_blank">{t("เปิดหน้าโดเนท", "Open Donation Page")}</Link>}
+                <button className="btn" type="button" onClick={() => setStatus(null)}>{t("ปิด", "Close")}</button>
               </div>
             </section>
           </div>
         )}
         <p className="font-bold text-mint">Donation Page Builder</p>
-        <h1 className="mt-3 text-5xl font-black">ตั้งค่าหน้าโดเนท</h1>
+        <h1 className="mt-3 text-5xl font-black">{t("ตั้งค่าหน้าโดเนท", "Donation Page Settings")}</h1>
         <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
-          <label>ชื่อครีเอเตอร์<input className="input mt-2" name="displayName" value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value })} required /></label>
+          <label>{t("ชื่อครีเอเตอร์", "Creator Name")}<input className="input mt-2" name="displayName" value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value })} required /></label>
           <div className="grid gap-4 md:grid-cols-2">
             <label>Handle<input className="input mt-2" name="handle" value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value })} required /></label>
-            <label>Quicklink URL<input className="input mt-2" name="quicklinkUrl" value={settings.quicklinkUrl} onChange={(event) => setSettings({ ...settings, quicklinkUrl: event.target.value })} placeholder="https://streamlabs.com/..." /></label>
+            <label>Quicklink URL<input className="input mt-2" name="quicklinkUrl" value={settings.quicklinkUrl} onChange={(event) => setSettings({ ...settings, quicklinkUrl: event.target.value })} placeholder="https://www.twitch.tv/..." /></label>
           </div>
-          <label>URL หน้าโดเนท<input className="input mt-2" name="slug" value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20) })} required /><span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร พิมพ์เล็ก ตัวเลข และขีดกลางเท่านั้น</span></label>
+          <label>
+            {t("URL หน้าโดเนท", "Donation Page URL")}
+            <input className="input mt-2" name="slug" value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) })} required />
+            <span className="mt-2 block text-sm text-white/60">{t("4-20 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น", "4-20 characters. Lowercase letters and numbers only.")}</span>
+          </label>
           <div>
-            <label className="font-bold">รูป Banner</label>
-            <p className="mt-1 text-sm text-white/60">แนะนำขนาด 1920 x 640 px, ไฟล์ JPG/PNG/WebP, ไม่เกิน 5MB</p>
+            <label className="font-bold">{t("รูป Banner", "Banner Image")}</label>
+            <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 640 px, ไฟล์ JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 640 px, JPG/PNG/WebP, up to 5MB.")}</p>
             <input className="input mt-2" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBannerChange} />
             {bannerPreview && <img alt="Banner preview" src={bannerPreview} className="mt-3 h-44 w-full rounded-lg object-cover" />}
           </div>
-          <label>ยอดโดเนทขั้นต่ำ<input className="input mt-2" name="minAmount" type="number" min="1" value={settings.minAmount} onChange={(event) => setSettings({ ...settings, minAmount: Number(event.target.value) })} required /></label>
-          <label>Donation goal<input className="input mt-2" name="goalAmount" type="number" min="100" value={settings.goalAmount} onChange={(event) => setSettings({ ...settings, goalAmount: Number(event.target.value) })} required /></label>
-          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกหน้าโดเนท"}</button>
+          <label>{t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}<input className="input mt-2" name="minAmount" type="number" min="1" value={settings.minAmount} onChange={(event) => setSettings({ ...settings, minAmount: Number(event.target.value) })} required /></label>
+          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
         </form>
       </main>
     </AuthGate>

@@ -32,6 +32,9 @@ export class SettingsService {
       data.email = dto.email;
       data.pendingEmail = null;
     }
+    if (dto.donationNotificationEmail !== undefined) {
+      data.donationNotificationEmail = dto.donationNotificationEmail.trim().toLowerCase();
+    }
     if (Object.keys(data).length) {
       await this.prisma.user.update({ where: { id: userId }, data });
     }
@@ -44,8 +47,8 @@ export class SettingsService {
     const slug = dto.slug.trim().toLowerCase();
     const donationNotificationEmail = dto.donationNotificationEmail?.trim().toLowerCase() || null;
 
-    if (!/^[a-z0-9-]{4,20}$/.test(slug)) {
-      throw new BadRequestException("Donation URL must be 4-20 lowercase letters, numbers, or hyphens");
+    if (!/^[a-z0-9]{4,20}$/.test(slug)) {
+      throw new BadRequestException("Donation URL must be 4-20 lowercase letters or numbers");
     }
 
     const [slugOwner, usernameOwner] = await Promise.all([

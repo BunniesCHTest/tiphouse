@@ -36,6 +36,8 @@ type DonateStep = "form" | "summary" | "qr" | "success";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const quickAmounts = [50, 100, 300, 500, 1000];
+const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
+const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
 
 const defaultPage: PageData = {
@@ -65,7 +67,8 @@ function cookieValue(name: string) {
 
 function hasBlockedWord(value: string) {
   const normalized = value.toLowerCase().replace(/\s+/g, "");
-  return bannedWords.some((word) => normalized.includes(word.toLowerCase().replace(/\s+/g, "")));
+  if (rudePrefixPattern.test(normalized)) return true;
+  return [...bannedWords, ...extraBannedWords].some((word) => normalized.includes(word.toLowerCase().replace(/\s+/g, "")));
 }
 
 export default function DonatePage({ params }: { params: Promise<{ slug: string }> }) {

@@ -157,8 +157,9 @@ export class DonationsService {
 
   async dashboard(userId: string) {
     await this.ensureApproved(userId);
-    const [page, donations, totals] = await Promise.all([
+    const [page, overlay, donations, totals] = await Promise.all([
       this.prisma.donationPage.findUnique({ where: { userId } }),
+      this.prisma.overlaySetting.findUnique({ where: { userId } }),
       this.prisma.donation.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50 }),
       this.prisma.donation.aggregate({
         where: { userId, paymentStatus: DonationStatus.PAID },
@@ -166,25 +167,33 @@ export class DonationsService {
         _count: true,
       }),
     ]);
-    return { page, donations, revenue: totals._sum.amount ?? 0, donationCount: totals._count };
+    const streamlabsTips = await this.streamlabsTips(overlay?.theme).catch(() => []);
+    return { page, donations, streamlabsTips, revenue: totals._sum.amount ?? 0, donationCount: totals._count };
   }
 
   async updatePage(userId: string, dto: UpdateDonationPageDto) {
     await this.ensureApproved(userId);
+    const { quicklinkUrl, theme, ...pageFields } = dto;
     if (dto.slug) {
       const slug = dto.slug.trim().toLowerCase();
-      if (!/^[a-z0-9-]{4,20}$/.test(slug)) {
-        throw new BadRequestException("Donation URL must be 4-20 lowercase letters, numbers, or hyphens");
+      if (!/^[a-z0-9]{4,20}$/.test(slug)) {
+        throw new BadRequestException("Donation URL must be 4-20 lowercase letters or numbers");
       }
       const existing = await this.prisma.donationPage.findUnique({ where: { slug }, select: { userId: true } });
       if (existing && existing.userId !== userId) {
         throw new ConflictException("เนื่องจาก Username นี้มีผู้ใช้งานแล้วรบกวนระบุ Username ใหม่อีกครั้ง");
       }
-      dto.slug = slug;
+      pageFields.slug = slug;
     }
+    const current = await this.prisma.donationPage.findUnique({ where: { userId }, select: { theme: true } });
+    const currentTheme = typeof current?.theme === "object" && current.theme ? current.theme as Record<string, unknown> : {};
     const data: Prisma.DonationPageUpdateInput = {
-      ...dto,
-      theme: dto.theme as Prisma.InputJsonValue | undefined,
+      ...pageFields,
+      theme: {
+        ...currentTheme,
+        ...(theme ?? {}),
+        ...(quicklinkUrl !== undefined ? { quicklinkUrl } : {}),
+      } as Prisma.InputJsonValue,
     };
     return this.prisma.donationPage.update({ where: { userId }, data });
   }
@@ -194,5 +203,27 @@ export class DonationsService {
     if (user?.accountStatus !== "APPROVED") {
       throw new ForbiddenException("Account is waiting for admin approval");
     }
+  }
+
+  private async streamlabsTips(theme: unknown) {
+    const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
+    if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
+    const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
+      headers: { Authorization: `Bearer ${streamlabs.accessToken}` },
+    });
+    if (!response.ok) return [];
+    const body = await response.json() as any;
+    const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+    return rows.map((item: any) => {
+      const amount = Number(item.amount ?? item.formatted_amount ?? 0);
+      return {
+        id: String(item.donation_id ?? item.id ?? item.transaction_id ?? `${item.created_at ?? Date.now()}-${item.name ?? item.from ?? "tip"}`),
+        when: item.created_at ?? item.createdAt ?? item.date ?? item.when ?? null,
+        tipper: String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous"),
+        amount: Number.isFinite(amount) ? amount : 0,
+        message: String(item.message ?? item.note ?? ""),
+        source: "streamlabs",
+      };
+    }).filter((item: any) => item.amount > 0);
   }
 }

@@ -167,6 +167,7 @@ export default function AdminPage() {
   const [transactions, setTransactions] = useState<DonationRow[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [historyUser, setHistoryUser] = useState<UserRow | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [userTransactions, setUserTransactions] = useState<DonationRow[]>([]);
   const [query, setQuery] = useState("");
@@ -292,11 +293,12 @@ export default function AdminPage() {
     setCreatedPassword("");
     const { data } = await api.post(`/admin/users/${user.id}/reset-password`, {}, { headers: authHeaders() });
     setCreatedPassword(data.tempPassword);
-    setMessage(`Reset password ของ ${user.username} สำเร็จ`);
+    setMessage(`Reset password ของ ${user.username} เป็นรหัส Default Abc@1234 แล้ว`);
   }
 
   async function showUserHistory(user: UserRow) {
-    setSelectedUser(user);
+    setSelectedUser(null);
+    setHistoryUser(user);
     try {
       const { data } = await api.get(`/admin/transactions/user/${user.id}`, { headers: authHeaders() });
       setUserTransactions(asArray<DonationRow>(data));
@@ -357,7 +359,7 @@ export default function AdminPage() {
         <nav className="mt-8 flex flex-wrap gap-2">
           {tabs.map(([key, label]) => (
             <button key={key} className={`btn ${active === key ? "btn-primary" : ""}`} onClick={() => setActive(key)} type="button">
-              {label}
+              {key === "users" ? "User Management" : label}
             </button>
           ))}
         </nav>
@@ -402,12 +404,16 @@ export default function AdminPage() {
           <section className="card mt-5 overflow-auto p-4">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
+                <tr><th>User</th><th>ชื่อแสดงผล</th><th>Email</th><th>Email แจ้งเตือนโดเนท</th><th>Login</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th></th></tr>
+              </thead>
+              <thead className="hidden">
                 <tr><th>User</th><th>Email</th><th>Email แจ้งเตือนโดเนท</th><th>Login</th><th>Status</th><th>Role</th><th>URL หน้าโดเนท</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id} className="border-t border-white/10">
                     <td className="py-3 font-bold">{user.username}</td>
+                    <td>{user.page?.displayName || "-"}</td>
                     <td>{user.email}</td>
                     <td>{user.donationNotificationEmail || "-"}</td>
                     <td>{user.authProvider ?? "Email"}{user.streamlabsUsername && <span className="block text-mint">@{user.streamlabsUsername}</span>}</td>
@@ -502,7 +508,7 @@ export default function AdminPage() {
                   <button className="btn btn-primary md:col-span-2" type="submit">บันทึกข้อมูล User</button>
                 </form>
               )}
-              <div className="overflow-auto">
+              <div className="hidden">
                 <h3 className="mb-3 text-xl font-black">ประวัติ Transaction</h3>
                 <table className="w-full min-w-[760px] text-left text-sm">
                   <thead className="text-white/55"><tr><th>Donor</th><th>Amount</th><th>Status</th><th>Ref</th><th>Created</th></tr></thead>
@@ -544,6 +550,43 @@ export default function AdminPage() {
                     ))}
                   </dl>
                 ) : <p className="mt-3 text-white/55">ยังไม่มีข้อมูลบัญชีโอนจ่ายของ User นี้</p>}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {historyUser && (
+          <div className="fixed inset-0 z-40 overflow-auto bg-black/70 p-4">
+            <section className="card mx-auto my-8 grid w-[min(980px,100%)] gap-5 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-3xl font-black">ประวัติ Transaction: {historyUser.username}</h2>
+                <button className="btn" onClick={() => setHistoryUser(null)} type="button">ปิด</button>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full min-w-[900px] text-left text-sm">
+                  <thead className="text-white/55">
+                    <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th></tr>
+                  </thead>
+                  <tbody>
+                    {userTransactions.map((row) => (
+                      <tr key={row.id} className="border-t border-white/10">
+                        <td className="py-3">{new Date(row.paidAt ?? row.createdAt).toLocaleString("th-TH")}</td>
+                        <td>
+                          <span className="font-bold">{row.paymentProvider ?? "PROMPTPAY"}</span>
+                          <span className="block text-xs text-white/45">{row.donorName}{row.message ? ` / ${row.message}` : ""}</span>
+                        </td>
+                        <td>
+                          {row.transactionRef ? (
+                            <a className="font-bold text-mint underline" href={`/receipt/${encodeURIComponent(row.transactionRef)}`} target="_blank">{row.transactionRef}</a>
+                          ) : "-"}
+                        </td>
+                        <td>฿{row.amount.toLocaleString()}</td>
+                        <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button></td>
+                      </tr>
+                    ))}
+                    {!userTransactions.length && <tr><td className="p-4 text-white/45" colSpan={5}>ยังไม่มี Transaction</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>

@@ -18,10 +18,10 @@ type Profile = {
   } | null;
 };
 
-const slugPattern = /^[a-z0-9-]{4,20}$/;
+const slugPattern = /^[a-z0-9]{4,20}$/;
 
 function normalizeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 20);
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
 }
 
 function apiMessage(error: unknown) {
@@ -111,7 +111,7 @@ export default function CreatorOnboardingPage() {
               placeholder="bunniesch"
               required
             />
-            <span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร พิมพ์เล็ก ตัวเลข และขีดกลางเท่านั้น</span>
+            <span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น</span>
           </label>
           <label>
             {t("URL หน้าโดเนท", "Donation Page URL")}

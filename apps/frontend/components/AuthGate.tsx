@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { clearSession } from "@/lib/session";
+
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const LAST_ACTIVITY_KEY = "tiphouse_last_activity";
 
 export function AuthGate({ children, admin = false, allowPending = false }: { children: React.ReactNode; admin?: boolean; allowPending?: boolean }) {
   const pathname = usePathname();
@@ -26,6 +30,28 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
     setPendingApproval(Boolean(token) && isAllowedRole && !isApproved);
     setChecked(true);
   }, [admin, allowPending, pathname, router]);
+
+  useEffect(() => {
+    if (!allowed) return;
+    const loginPath = admin ? "/control-admin/login" : "/login";
+    const touch = () => localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    const verify = () => {
+      const lastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || Date.now());
+      if (Date.now() - lastActivity >= INACTIVITY_TIMEOUT_MS) {
+        clearSession();
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
+        router.replace(loginPath);
+      }
+    };
+    touch();
+    const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
+    events.forEach((eventName) => window.addEventListener(eventName, touch, { passive: true }));
+    const timer = window.setInterval(verify, 30_000);
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, touch));
+      window.clearInterval(timer);
+    };
+  }, [admin, allowed, router]);
 
   if (!checked) return <main className="grid min-h-screen place-items-center">Loading...</main>;
 

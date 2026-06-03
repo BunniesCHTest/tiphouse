@@ -98,9 +98,13 @@ export class UpdateProfileDto {
   @IsOptional()
   username?: string;
 
-  @IsString()
+  @IsEmail()
   @IsOptional()
   email?: string;
+
+  @IsEmail()
+  @IsOptional()
+  donationNotificationEmail?: string;
 }
 
 export class CompleteCreatorOnboardingDto {
@@ -110,7 +114,7 @@ export class CompleteCreatorOnboardingDto {
   displayName!: string;
 
   @IsString()
-  @Matches(/^[a-z0-9-]{4,20}$/)
+  @Matches(/^[a-z0-9]{4,20}$/)
   slug!: string;
 
   @IsEmail()
