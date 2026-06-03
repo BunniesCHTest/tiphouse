@@ -40,6 +40,7 @@ type DonationRow = {
   message: string;
   amount: number;
   paymentStatus: string;
+  paymentProvider?: string;
   transactionRef?: string | null;
   createdAt: string;
   paidAt?: string | null;
@@ -83,17 +84,15 @@ function displayUserStatus(user: Pick<UserRow, "accountStatus" | "creatorSetupCo
 }
 
 function downloadExcel(rows: DonationRow[]) {
-  const header = ["Creator", "Email", "Donor", "Amount", "Status", "Ref", "Message", "Created", "Paid"];
+  const header = ["วันที่", "รายการ", "เลขที่อ้างอิง", "จำนวนเงิน", "ชื่อ", "ข้อความ", "สถานะ"];
   const body = rows.map((row) => [
-    row.user?.username ?? "",
-    row.user?.email ?? "",
-    row.donorName,
-    row.amount,
-    row.paymentStatus,
+    row.paidAt ?? row.createdAt,
+    row.paymentProvider ?? "PROMPTPAY",
     row.transactionRef ?? "",
+    row.amount,
+    row.donorName,
     row.message,
-    row.createdAt,
-    row.paidAt ?? "",
+    row.paymentStatus,
   ]);
   const html = `<table><tr>${header.map((h) => `<th>${h}</th>`).join("")}</tr>${body
     .map((r) => `<tr>${r.map((c) => `<td>${String(c).replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</td>`).join("")}</tr>`)
@@ -105,6 +104,59 @@ function downloadExcel(rows: DonationRow[]) {
   link.download = `tiphouse-transactions-${Date.now()}.xls`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function splitRow(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      quoted = !quoted;
+    } else if ((char === "," || char === "\t") && !quoted) {
+      cells.push(current.trim().replace(/^"|"$/g, ""));
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim().replace(/^"|"$/g, ""));
+  return cells;
+}
+
+function parseTransactionImport(text: string) {
+  const doc = typeof DOMParser !== "undefined" && text.trim().startsWith("<")
+    ? new DOMParser().parseFromString(text, "text/html")
+    : null;
+  if (doc) {
+    const rows = Array.from(doc.querySelectorAll("tr")).map((tr) => Array.from(tr.querySelectorAll("th,td")).map((cell) => cell.textContent?.trim() ?? ""));
+    return rowsToImportPayload(rows);
+  }
+  const rows = text.split(/\r?\n/).map((line) => splitRow(line)).filter((row) => row.some(Boolean));
+  return rowsToImportPayload(rows);
+}
+
+function rowsToImportPayload(rows: string[][]) {
+  if (!rows.length) return [];
+  const header = rows[0].map((cell) => cell.toLowerCase().trim());
+  const find = (...names: string[]) => header.findIndex((cell) => names.some((name) => cell.includes(name.toLowerCase())));
+  const indexes = {
+    date: find("วันที่", "date"),
+    name: find("ชื่อ", "name", "donor"),
+    amount: find("จำนวนเงิน", "amount"),
+    channel: find("ช่องทาง", "รายการ", "channel", "method"),
+    message: find("ข้อความ", "message"),
+    reference: find("เลขที่อ้างอิง", "reference", "ref"),
+  };
+  return rows.slice(1).map((row) => ({
+    date: indexes.date >= 0 ? row[indexes.date] : "",
+    name: indexes.name >= 0 ? row[indexes.name] : "",
+    amount: Number(String(indexes.amount >= 0 ? row[indexes.amount] : "0").replace(/[^\d.]/g, "")),
+    channel: indexes.channel >= 0 ? row[indexes.channel] : "PromptPay",
+    message: indexes.message >= 0 ? row[indexes.message] : "",
+    reference: indexes.reference >= 0 ? row[indexes.reference] : "",
+  })).filter((row) => row.name && row.amount > 0);
 }
 
 export default function AdminPage() {
@@ -121,6 +173,7 @@ export default function AdminPage() {
   const [status, setStatus] = useState("");
   const [message, setMessage] = useState("");
   const [createdPassword, setCreatedPassword] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const canManageUsers = role === "ADMIN";
   const tabs = canManageUsers ? adminTabs : accountingTabs;
@@ -259,6 +312,32 @@ export default function AdminPage() {
     await loadApprovals();
   }
 
+  async function importExcelFile(file: File | null) {
+    if (!file) return;
+    setImporting(true);
+    setMessage("");
+    try {
+      const text = await file.text();
+      const rows = parseTransactionImport(text);
+      if (!rows.length) {
+        setMessage("ไม่พบข้อมูลสำหรับ import กรุณาใช้คอลัมน์ วันที่, ชื่อ, จำนวนเงิน, ช่องทาง, ข้อความ");
+        return;
+      }
+      const { data } = await api.post("/admin/transactions/import", { rows }, { headers: authHeaders() });
+      setMessage(`Import สำเร็จ ${data.imported ?? 0} รายการ`);
+      await loadTransactions();
+    } catch {
+      setMessage("Import ไม่สำเร็จ กรุณาตรวจสอบไฟล์และคอลัมน์ข้อมูล");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function replayAlert(row: DonationRow) {
+    await api.post(`/admin/transactions/${row.id}/replay-alert`, {}, { headers: authHeaders() });
+    setMessage(`ส่ง Alert ซ้ำแล้ว: ${row.transactionRef ?? row.id}`);
+  }
+
   const totalRevenue = useMemo(() => transactions.reduce((sum, row) => sum + (row.paymentStatus === "PAID" ? row.amount : 0), 0), [transactions]);
 
   function logout() {
@@ -297,6 +376,18 @@ export default function AdminPage() {
           )}
           <button className="btn" onClick={() => refresh().catch(() => setMessage("โหลดข้อมูลไม่สำเร็จ"))} type="button">ค้นหา</button>
           {active === "transactions" && <button className="btn" onClick={() => downloadExcel(transactions)} type="button">Export Excel</button>}
+          {active === "transactions" && (
+            <label className={`btn cursor-pointer ${importing ? "opacity-60" : ""}`}>
+              {importing ? "Importing..." : "Import Excel"}
+              <input
+                className="hidden"
+                type="file"
+                accept=".csv,.tsv,.xls,.html,.txt"
+                disabled={importing}
+                onChange={(event) => importExcelFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
+          )}
           {active === "users" && canManageUsers && <button className="btn btn-primary" onClick={() => setCreatingUser(true)} type="button">Add / Create User</button>}
         </section>
         {createdPassword && <p className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-3 text-gold">Temporary password: <strong>{createdPassword}</strong></p>}
@@ -340,18 +431,23 @@ export default function AdminPage() {
             <div className="mb-4 text-white/70">ยอดโอนสำเร็จในรายการที่กรอง: <strong className="text-mint">฿{totalRevenue.toLocaleString()}</strong></div>
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
-                <tr><th>Creator</th><th>Donor</th><th>Amount</th><th>Status</th><th>Ref</th><th>Message</th><th>Created</th></tr>
+                <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th></tr>
               </thead>
               <tbody>
                 {transactions.map((row) => (
                   <tr key={row.id} className="border-t border-white/10">
-                    <td className="py-3"><button className="font-bold text-mint" onClick={() => row.user && showUserHistory({ ...row.user, role: "", accountStatus: "" })}>{row.user?.username}</button></td>
-                    <td>{row.donorName}</td>
+                    <td className="py-3">{new Date(row.paidAt ?? row.createdAt).toLocaleString("th-TH")}</td>
+                    <td>
+                      <span className="font-bold">{row.paymentProvider ?? "PROMPTPAY"}</span>
+                      <span className="block text-xs text-white/45">{row.donorName}{row.message ? ` / ${row.message}` : ""}</span>
+                    </td>
+                    <td>
+                      {row.transactionRef ? (
+                        <a className="font-bold text-mint underline" href={`/receipt/${encodeURIComponent(row.transactionRef)}`} target="_blank">{row.transactionRef}</a>
+                      ) : "-"}
+                    </td>
                     <td>฿{row.amount.toLocaleString()}</td>
-                    <td>{row.paymentStatus}</td>
-                    <td>{row.transactionRef}</td>
-                    <td>{row.message}</td>
-                    <td>{new Date(row.createdAt).toLocaleString("th-TH")}</td>
+                    <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button></td>
                   </tr>
                 ))}
               </tbody>

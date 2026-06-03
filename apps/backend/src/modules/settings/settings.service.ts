@@ -54,7 +54,7 @@ export class SettingsService {
     ]);
 
     if ((slugOwner && slugOwner.userId !== userId) || (usernameOwner && usernameOwner.id !== userId)) {
-      throw new ConflictException("Donation URL is already used by another creator");
+      throw new ConflictException("เนื่องจาก Username นี้มีผู้ใช้งานแล้วรบกวนระบุ Username ใหม่อีกครั้ง");
     }
 
     await this.prisma.user.update({

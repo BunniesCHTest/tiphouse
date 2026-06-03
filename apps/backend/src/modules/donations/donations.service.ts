@@ -67,6 +67,25 @@ export class DonationsService {
     return [...totals.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
   }
 
+  async receipt(ref: string) {
+    const donation = await this.prisma.donation.findUnique({
+      where: { transactionRef: ref },
+      include: { page: { select: { slug: true, displayName: true } } },
+    });
+    if (!donation) throw new NotFoundException("Receipt not found");
+    return {
+      reference: donation.transactionRef,
+      paymentMethod: donation.paymentProvider,
+      createdAt: donation.createdAt,
+      paidAt: donation.paidAt,
+      status: donation.paymentStatus === DonationStatus.PAID ? "สำเร็จ" : donation.paymentStatus,
+      amount: donation.amount,
+      donorName: donation.anonymous ? "บุคคลนิรนาม" : donation.donorName,
+      message: donation.message,
+      page: donation.page,
+    };
+  }
+
   private async streamlabsTopTips(theme: unknown) {
     const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
     if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
@@ -159,7 +178,7 @@ export class DonationsService {
       }
       const existing = await this.prisma.donationPage.findUnique({ where: { slug }, select: { userId: true } });
       if (existing && existing.userId !== userId) {
-        throw new ConflictException("Donation URL is already used by another creator");
+        throw new ConflictException("เนื่องจาก Username นี้มีผู้ใช้งานแล้วรบกวนระบุ Username ใหม่อีกครั้ง");
       }
       dto.slug = slug;
     }

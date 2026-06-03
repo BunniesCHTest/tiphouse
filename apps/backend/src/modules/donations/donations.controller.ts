@@ -23,6 +23,11 @@ export class DonationsController {
     return this.donations.rank(slug);
   }
 
+  @Get("donations/receipt/:ref")
+  receipt(@Param("ref") ref: string) {
+    return this.donations.receipt(ref);
+  }
+
   @Post("donate")
   create(@Body() dto: CreateDonationDto, @Req() req: any) {
     return this.donations.createPending(dto, {

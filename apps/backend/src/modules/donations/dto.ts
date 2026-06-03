@@ -69,3 +69,31 @@ export class UpdateDonationPageDto {
   @IsOptional()
   theme?: Record<string, unknown>;
 }
+
+export class ImportDonationRowDto {
+  @IsString()
+  @IsOptional()
+  date?: string;
+
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  amount!: number;
+
+  @IsString()
+  @IsOptional()
+  channel?: string;
+
+  @IsString()
+  @MaxLength(250)
+  @IsOptional()
+  message?: string;
+
+  @IsString()
+  @IsOptional()
+  reference?: string;
+}

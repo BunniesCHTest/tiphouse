@@ -24,8 +24,8 @@ export class BootstrapService implements OnApplicationBootstrap {
     });
     const existing =
       candidates.find((item) => item.email === "admin@tiphouse.test") ??
-      candidates.find((item) => item.username === "AdminC") ??
-      candidates.find((item) => item.username === "Test");
+      candidates.find((item) => item.username === "Test") ??
+      candidates.find((item) => item.username === "AdminC");
 
     if (existing) {
       const archiveTargets = candidates.filter((item) => item.id !== existing.id);
@@ -42,7 +42,7 @@ export class BootstrapService implements OnApplicationBootstrap {
       await this.prisma.user.update({
         where: { id: existing.id },
         data: {
-          username: "AdminC",
+          username: "Test",
           email: "admin@tiphouse.test",
           passwordHash,
           role: UserRole.ADMIN,
@@ -55,7 +55,7 @@ export class BootstrapService implements OnApplicationBootstrap {
     }
     await this.prisma.user.create({
       data: {
-        username: "AdminC",
+        username: "Test",
         email: "admin@tiphouse.test",
         passwordHash,
         role: UserRole.ADMIN,

@@ -1,13 +1,18 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { DonationStatus, PaymentProvider } from "@prisma/client";
 import * as argon2 from "argon2";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
+import { OverlayService } from "../overlay/overlay.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly overlay: OverlayService,
+  ) {}
 
   private requireAdmin(user: JwtUser) {
     if (user.role !== "ADMIN") throw new ForbiddenException("admin role required");
@@ -106,6 +111,74 @@ export class AdminController {
       take: 500,
       include: { user: { select: { id: true, username: true, email: true } }, page: { select: { slug: true, displayName: true } } },
     });
+  }
+
+  @Post("transactions/import")
+  async importTransactions(@CurrentUser() user: JwtUser, @Body() body: any) {
+    this.requireStaff(user);
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    if (!rows.length) throw new ForbiddenException("rows are required");
+
+    const creator = await this.prisma.user.findFirst({
+      where: {
+        role: "USER",
+        accountStatus: "APPROVED",
+        creatorSetupCompleted: true,
+        page: { isNot: null },
+      },
+      include: { page: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!creator?.page) throw new ForbiddenException("ยังไม่มี Creator ที่พร้อมรับ transaction import");
+
+    const created: Array<{ id: string }> = [];
+    for (const row of rows.slice(0, 300)) {
+      const amount = Math.round(Number(row.amount ?? 0));
+      if (!Number.isFinite(amount) || amount < 1 || amount > 20000) continue;
+      const paidAt = this.parseDate(row.date) ?? new Date();
+      const provider = this.paymentProviderFromChannel(row.channel);
+      const reference: string = String(row.reference ?? "").trim() || `TH-IMPORT-${Date.now()}-${created.length + 1}`;
+      const donation = await this.prisma.donation.create({
+        data: {
+          userId: creator.id,
+          pageId: creator.page.id,
+          donorName: String(row.name ?? "Anonymous").trim().slice(0, 80) || "Anonymous",
+          message: String(row.message ?? "").trim().slice(0, 250),
+          amount,
+          anonymous: false,
+          paymentStatus: DonationStatus.PAID,
+          paymentProvider: provider,
+          transactionRef: reference,
+          paidAt,
+          createdAt: paidAt,
+        },
+      });
+      created.push(donation);
+    }
+    return { imported: created.length, rows: created };
+  }
+
+  @Post("transactions/:id/replay-alert")
+  async replayAlert(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    this.requireStaff(user);
+    const donation = await this.prisma.donation.findUniqueOrThrow({
+      where: { id },
+      include: { user: { include: { overlay: true } } },
+    });
+    if (!donation.user.overlay?.streamerKey) return { ok: false, message: "Creator has no overlay URL" };
+    this.overlay.emitPaidDonation(donation.user.overlay.streamerKey, {
+      donorName: donation.anonymous ? "บุคคลนิรนาม" : donation.donorName,
+      amount: donation.amount,
+      message: donation.message,
+      anonymous: donation.anonymous,
+      settings: {
+        theme: donation.user.overlay.theme,
+        animation: donation.user.overlay.animation,
+        soundUrl: donation.user.overlay.soundUrl,
+        ttsEnabled: donation.user.overlay.ttsEnabled,
+      },
+    });
+    return { ok: true };
   }
 
   @Get("transactions/user/:id")
@@ -210,5 +283,31 @@ export class AdminController {
     });
     await this.prisma.adminLog.create({ data: { adminId: admin.sub, action: "REJECT_REQUEST", targetId: id } });
     return updated;
+  }
+
+  private parseDate(value: unknown) {
+    if (!value) return null;
+    if (typeof value === "number") {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      excelEpoch.setUTCDate(excelEpoch.getUTCDate() + value);
+      return excelEpoch;
+    }
+    const text = String(value).trim();
+    const thaiMatch = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (thaiMatch) {
+      const [, day, month, year, hour = "0", minute = "0"] = thaiMatch;
+      const normalizedYear = Number(year) > 2400 ? Number(year) - 543 : Number(year);
+      return new Date(normalizedYear, Number(month) - 1, Number(day), Number(hour), Number(minute));
+    }
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private paymentProviderFromChannel(value: unknown) {
+    const channel = String(value ?? "").toLowerCase();
+    if (channel.includes("omise")) return PaymentProvider.OMISE;
+    if (channel.includes("gb")) return PaymentProvider.GBPRIMEPAY;
+    if (channel.includes("stripe")) return PaymentProvider.STRIPE;
+    return PaymentProvider.PROMPTPAY;
   }
 }
