@@ -89,9 +89,13 @@ export class DonationsService {
   private async streamlabsTopTips(theme: unknown) {
     const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
     if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1800);
     const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
       headers: { Authorization: `Bearer ${streamlabs.accessToken}` },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!response.ok) return [];
     const body = await response.json() as any;
     const donations = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
@@ -208,9 +212,13 @@ export class DonationsService {
   private async streamlabsTips(theme: unknown) {
     const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
     if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1800);
     const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
       headers: { Authorization: `Bearer ${streamlabs.accessToken}` },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!response.ok) return [];
     const body = await response.json() as any;
     const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];

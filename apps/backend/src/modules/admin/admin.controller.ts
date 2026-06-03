@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, ConflictException, Controller, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { DonationStatus, PaymentProvider } from "@prisma/client";
 import * as argon2 from "argon2";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
@@ -242,11 +242,17 @@ export class AdminController {
   @Get("approvals")
   async approvals(@CurrentUser() user: JwtUser, @Query("status") status?: string) {
     this.requireAdmin(user);
-    return this.prisma.approvalRequest.findMany({
+    const rows = await this.prisma.approvalRequest.findMany({
       where: { status: status ? (status as any) : undefined },
       orderBy: { createdAt: "desc" },
       include: { user: { include: { page: true } } },
     });
+    const reviewerIds = [...new Set(rows.map((row) => row.reviewedBy).filter(Boolean) as string[])];
+    const reviewers = reviewerIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: reviewerIds } }, select: { id: true, username: true, email: true } })
+      : [];
+    const reviewerMap = new Map(reviewers.map((reviewer) => [reviewer.id, reviewer]));
+    return rows.map((row) => ({ ...row, reviewer: row.reviewedBy ? reviewerMap.get(row.reviewedBy) ?? null : null }));
   }
 
   @Post("approvals/:id/approve")
@@ -257,16 +263,28 @@ export class AdminController {
       await this.prisma.user.update({ where: { id: request.userId }, data: { accountStatus: "APPROVED" } });
     }
     if (request.type === "EMAIL_CHANGE" && request.requestedEmail) {
-      await this.prisma.user.update({
-        where: { id: request.userId },
-        data: { email: request.requestedEmail, pendingEmail: null },
-      });
+      const detail = this.parseApprovalNote(request.note);
+      const data: any = { pendingEmail: null };
+      if (detail.newUsername) {
+        const existing = await this.prisma.user.findUnique({ where: { username: String(detail.newUsername) }, select: { id: true } });
+        if (existing && existing.id !== request.userId) throw new ConflictException("Username already exists");
+        data.username = String(detail.newUsername);
+        data.page = { update: { handle: `@${detail.newUsername}` } };
+      }
+      if (detail.newEmail || request.requestedEmail) {
+        const email = String(detail.newEmail ?? request.requestedEmail).toLowerCase();
+        const existing = await this.prisma.user.findUnique({ where: { email }, select: { id: true } });
+        if (existing && existing.id !== request.userId) throw new ConflictException("Email already exists");
+        data.email = email;
+        data.donationNotificationEmail = email;
+      }
+      await this.prisma.user.update({ where: { id: request.userId }, data });
     }
     const updated = await this.prisma.approvalRequest.update({
       where: { id },
       data: { status: "APPROVED", reviewedBy: admin.sub, reviewedAt: new Date() },
     });
-    await this.prisma.adminLog.create({ data: { adminId: admin.sub, action: "APPROVE_REQUEST", targetId: id } });
+    await this.prisma.adminLog.create({ data: { adminId: admin.sub, action: "APPROVE_REQUEST", targetId: id, metadata: { note: request.note } } });
     return updated;
   }
 
@@ -281,8 +299,16 @@ export class AdminController {
       where: { id },
       data: { status: "REJECTED", reviewedBy: admin.sub, reviewedAt: new Date() },
     });
-    await this.prisma.adminLog.create({ data: { adminId: admin.sub, action: "REJECT_REQUEST", targetId: id } });
+    await this.prisma.adminLog.create({ data: { adminId: admin.sub, action: "REJECT_REQUEST", targetId: id, metadata: { note: request.note } } });
     return updated;
+  }
+
+  private parseApprovalNote(note?: string | null) {
+    try {
+      return note ? JSON.parse(note) as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
   }
 
   private parseDate(value: unknown) {

@@ -53,6 +53,10 @@ type ApprovalRow = {
   type: string;
   status: string;
   requestedEmail?: string | null;
+  note?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewer?: { username: string; email: string } | null;
   createdAt: string;
   user: UserRow;
 };
@@ -81,6 +85,14 @@ function displayUserStatus(user: Pick<UserRow, "accountStatus" | "creatorSetupCo
   if (user.accountStatus === "SUSPENDED") return "SUSPENDED";
   if (user.accountStatus === "APPROVED" && user.creatorSetupCompleted) return "ACTIVE";
   return "PENDING";
+}
+
+function approvalDetails(row: ApprovalRow) {
+  try {
+    return row.note ? JSON.parse(row.note) as Record<string, string> : {};
+  } catch {
+    return {};
+  }
 }
 
 function downloadExcel(rows: DonationRow[]) {
@@ -168,6 +180,7 @@ export default function AdminPage() {
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [historyUser, setHistoryUser] = useState<UserRow | null>(null);
+  const [selectedApproval, setSelectedApproval] = useState<ApprovalRow | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [userTransactions, setUserTransactions] = useState<DonationRow[]>([]);
   const [query, setQuery] = useState("");
@@ -177,7 +190,9 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
 
   const canManageUsers = role === "ADMIN";
-  const tabs = canManageUsers ? adminTabs : accountingTabs;
+  const tabs: Array<[AdminTab, string]> = canManageUsers
+    ? [["users", "User Management"], ["transactions", "Transaction โดเนท"], ["approvals", "คำขออนุมัติ"]]
+    : accountingTabs;
 
   useEffect(() => {
     const storedRole = localStorage.getItem("tiphouse_role") ?? "";
@@ -465,17 +480,17 @@ export default function AdminPage() {
           <section className="card mt-5 overflow-auto p-4">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="text-white/55">
-                <tr><th>Type</th><th>User</th><th>Email</th><th>Requested Email</th><th>Status</th><th>Created</th><th></th></tr>
+                <tr><th>Type</th><th>User</th><th>ข้อมูลใหม่</th><th>Status</th><th>Created</th><th>Info</th><th></th></tr>
               </thead>
               <tbody>
                 {approvals.map((row) => (
                   <tr key={row.id} className="border-t border-white/10">
                     <td className="py-3 font-bold">{row.type}</td>
                     <td>{row.user.username}</td>
-                    <td>{row.user.email}</td>
-                    <td>{row.requestedEmail ?? "-"}</td>
+                    <td>{approvalDetails(row).newUsername || approvalDetails(row).newEmail || row.requestedEmail || "-"}</td>
                     <td>{row.status}</td>
                     <td>{new Date(row.createdAt).toLocaleString("th-TH")}</td>
+                    <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => setSelectedApproval(row)}>i</button></td>
                     <td className="flex gap-2 py-2">
                       <button className="btn btn-primary" onClick={() => review(row.id, "approve")} type="button">อนุมัติ</button>
                       <button className="btn" onClick={() => review(row.id, "reject")} type="button">ปฏิเสธ</button>
@@ -485,6 +500,28 @@ export default function AdminPage() {
               </tbody>
             </table>
           </section>
+        )}
+
+        {selectedApproval && (
+          <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4">
+            <section className="card grid w-[min(620px,100%)] gap-4 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-3xl font-black">รายละเอียดคำขออนุมัติ</h2>
+                <button className="btn" type="button" onClick={() => setSelectedApproval(null)}>ปิด</button>
+              </div>
+              {(() => {
+                const detail = approvalDetails(selectedApproval);
+                return (
+                  <dl className="grid gap-3">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3"><dt className="text-sm text-white/55">วันที่เปลี่ยนแปลง</dt><dd className="font-bold">{new Date(selectedApproval.createdAt).toLocaleString("th-TH")}</dd></div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3"><dt className="text-sm text-white/55">ข้อมูลเก่า</dt><dd className="font-bold">Username: {detail.oldUsername || selectedApproval.user.username}<br />Email: {detail.oldEmail || selectedApproval.user.donationNotificationEmail || selectedApproval.user.email}</dd></div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3"><dt className="text-sm text-white/55">ข้อมูลใหม่</dt><dd className="font-bold">Username: {detail.newUsername || "-"}<br />Email: {detail.newEmail || selectedApproval.requestedEmail || "-"}</dd></div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3"><dt className="text-sm text-white/55">ผู้อนุมัติ</dt><dd className="font-bold">{selectedApproval.reviewer?.username || selectedApproval.reviewedBy || "-"}</dd></div>
+                  </dl>
+                );
+              })()}
+            </section>
+          </div>
         )}
 
         {selectedUser && (

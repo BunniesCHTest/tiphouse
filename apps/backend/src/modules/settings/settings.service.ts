@@ -26,17 +26,39 @@ export class SettingsService {
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const data: any = {};
-    if (dto.username && dto.username !== current.username) data.username = dto.username;
-    if (dto.email && dto.email !== current.email) {
-      data.email = dto.email;
-      data.pendingEmail = null;
+    const nextUsername = dto.username?.trim();
+    const nextEmail = (dto.email ?? dto.donationNotificationEmail)?.trim().toLowerCase();
+    const profileChange: Record<string, unknown> = {
+      kind: "PROFILE_CHANGE",
+      oldUsername: current.username,
+      oldEmail: current.donationNotificationEmail ?? current.email,
+      requestedAt: new Date().toISOString(),
+    };
+
+    if (nextUsername && nextUsername !== current.username) {
+      if (!/^[a-z0-9]{4,20}$/.test(nextUsername)) {
+        throw new BadRequestException("Username must be 4-20 lowercase letters or numbers");
+      }
+      const existing = await this.prisma.user.findUnique({ where: { username: nextUsername }, select: { id: true } });
+      if (existing && existing.id !== userId) {
+        throw new ConflictException("เนื่องจาก Username นี้มีผู้ใช้งานแล้วรบกวนระบุ Username ใหม่อีกครั้ง");
+      }
+      profileChange.newUsername = nextUsername;
     }
-    if (dto.donationNotificationEmail !== undefined) {
-      data.donationNotificationEmail = dto.donationNotificationEmail.trim().toLowerCase();
+
+    if (nextEmail && nextEmail !== (current.donationNotificationEmail ?? current.email)) {
+      profileChange.newEmail = nextEmail;
     }
-    if (Object.keys(data).length) {
-      await this.prisma.user.update({ where: { id: userId }, data });
+
+    if (profileChange.newUsername || profileChange.newEmail) {
+      await this.prisma.approvalRequest.create({
+        data: {
+          userId,
+          type: "EMAIL_CHANGE",
+          requestedEmail: typeof profileChange.newEmail === "string" ? profileChange.newEmail : null,
+          note: JSON.stringify(profileChange),
+        },
+      });
     }
     return this.getProfile(userId);
   }
