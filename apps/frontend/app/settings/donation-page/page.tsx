@@ -52,6 +52,25 @@ function validateImageFile(file: File | null, label: string) {
   }
 }
 
+function isDataUrl(value?: string) {
+  return Boolean(value?.startsWith("data:"));
+}
+
+function cachePageSettings(page: PageSettings) {
+  const cacheable = {
+    ...page,
+    bannerUrl: isDataUrl(page.bannerUrl) ? "" : page.bannerUrl,
+    donationBackgroundUrl: isDataUrl(page.donationBackgroundUrl) ? "" : page.donationBackgroundUrl,
+  };
+  try {
+    localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(cacheable));
+    localStorage.setItem(userCacheKey("donation_slug"), page.slug);
+  } catch {
+    localStorage.removeItem(userCacheKey("page_settings"));
+    localStorage.setItem(userCacheKey("donation_slug"), page.slug);
+  }
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof AxiosError) {
     const message = error.response?.data?.message;
@@ -91,8 +110,7 @@ export default function DonationPageSettings() {
         donationBackgroundUrl: res.data.page?.theme?.donationBackgroundUrl ?? cachedSettings?.donationBackgroundUrl ?? "",
       };
       setSettings(page);
-      localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));
-      localStorage.setItem(userCacheKey("donation_slug"), page.slug);
+      cachePageSettings(page);
       if (page.bannerUrl) setBannerPreview(page.bannerUrl);
       if (page.donationBackgroundUrl) setBackgroundPreview(page.donationBackgroundUrl);
     }).catch(() => undefined);
@@ -140,12 +158,11 @@ export default function DonationPageSettings() {
     try {
       const { data } = await api.patch("/settings/page", payload, { headers: authHeaders() });
       const savedPage = { ...payload, ...data, quicklinkUrl: data?.theme?.quicklinkUrl ?? payload.quicklinkUrl };
-      localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(savedPage));
-      localStorage.setItem(userCacheKey("donation_slug"), savedPage.slug);
-      window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: savedPage }));
       setSettings(savedPage);
       if (savedPage.bannerUrl) setBannerPreview(savedPage.bannerUrl);
       if (savedPage.donationBackgroundUrl) setBackgroundPreview(savedPage.donationBackgroundUrl);
+      cachePageSettings(savedPage);
+      window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: savedPage }));
       setStatus({
         type: "success",
         title: t("บันทึกสำเร็จ", "Saved"),
@@ -227,7 +244,7 @@ export default function DonationPageSettings() {
             {bannerPreview && (
               <div className="relative mt-3">
                 <img alt="Banner preview" src={bannerPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="btn absolute right-3 top-3 h-10 min-h-10 px-3 text-coral" type="button" aria-label="Delete banner image" onClick={clearBanner}>×</button>
+                <button className="btn absolute right-3 top-3 h-10 min-h-10 border-coral bg-coral px-4 font-black text-ink" type="button" aria-label="Delete banner image" onClick={clearBanner}>ลบรูป</button>
               </div>
             )}
           </div>
@@ -238,7 +255,7 @@ export default function DonationPageSettings() {
             {backgroundPreview && (
               <div className="relative mt-3">
                 <img alt="Donation background preview" src={backgroundPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="btn absolute right-3 top-3 h-10 min-h-10 px-3 text-coral" type="button" aria-label="Delete donation background image" onClick={clearBackground}>×</button>
+                <button className="btn absolute right-3 top-3 h-10 min-h-10 border-coral bg-coral px-4 font-black text-ink" type="button" aria-label="Delete donation background image" onClick={clearBackground}>ลบรูป</button>
               </div>
             )}
           </div>

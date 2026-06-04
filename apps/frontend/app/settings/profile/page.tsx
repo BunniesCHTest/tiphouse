@@ -128,6 +128,16 @@ export default function ProfileSettingsPage() {
         <p className="font-bold text-mint">Account Profile</p>
         <h1 className="mt-3 text-5xl font-black">{t("จัดการโปรไฟล์", "Profile Management")}</h1>
         <section className="card mt-8 p-5">
+          {!profile && !error && (
+            <div className="grid gap-4">
+              <div className="h-6 w-28 animate-pulse rounded bg-white/10" />
+              <div className="h-12 animate-pulse rounded-xl bg-white/10" />
+              <div className="h-6 w-20 animate-pulse rounded bg-white/10" />
+              <div className="h-12 animate-pulse rounded-xl bg-white/10" />
+              <div className="h-20 animate-pulse rounded-xl bg-white/10" />
+              <div className="h-12 animate-pulse rounded-xl bg-white/10" />
+            </div>
+          )}
           {profile && (
             <form onSubmit={save} className="grid gap-4">
               <label>
