@@ -20,13 +20,29 @@ export class SettingsService {
   async getProfile(userId: string) {
     const [profile, approvals] = await Promise.all([
       this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true, email: true, role: true, accountStatus: true, creatorSetupCompleted: true, donationNotificationEmail: true, page: true },
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: true,
+          accountStatus: true,
+          creatorSetupCompleted: true,
+          donationNotificationEmail: true,
+        },
       }),
       this.prisma.approvalRequest.findMany({
         where: { userId, type: "EMAIL_CHANGE" },
         orderBy: { createdAt: "desc" },
         take: 10,
+        select: {
+          id: true,
+          status: true,
+          requestedEmail: true,
+          note: true,
+          createdAt: true,
+          reviewedAt: true,
+        },
       }),
     ]);
     return profile ? { ...profile, approvals } : null;
