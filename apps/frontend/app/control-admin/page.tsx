@@ -65,6 +65,15 @@ type AdminTab = "users" | "transactions" | "approvals";
 
 const TRANSACTION_PAGE_SIZE = 10;
 const APPROVAL_PAGE_SIZE = 10;
+const MAX_CREATOR_FIELD_LENGTH = 30;
+
+function normalizeAdminSlug(value: FormDataEntryValue | null) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_CREATOR_FIELD_LENGTH);
+}
+
+function normalizeLimitedText(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim().slice(0, MAX_CREATOR_FIELD_LENGTH);
+}
 
 const adminTabs: Array<[AdminTab, string]> = [
   ["users", "จัดการ User"],
@@ -292,25 +301,39 @@ export default function AdminPage() {
     event.preventDefault();
     if (!selectedUser) return;
     const form = new FormData(event.currentTarget);
-    await api.patch(
-      `/admin/users/${selectedUser.id}`,
-      {
-        username: form.get("username"),
-        email: form.get("email"),
-        donationNotificationEmail: form.get("donationNotificationEmail"),
-        role: form.get("role"),
-        accountStatus: form.get("accountStatus") === "ACTIVE" ? "APPROVED" : form.get("accountStatus"),
-        page: {
-          slug: form.get("slug"),
-          displayName: form.get("displayName"),
-          handle: form.get("handle"),
+    const slug = normalizeAdminSlug(form.get("slug"));
+    const displayName = normalizeLimitedText(form.get("displayName"));
+    if (!/^[a-z0-9]{4,30}$/.test(slug)) {
+      setMessage("URL หน้าโดเนทต้องเป็นตัวพิมพ์เล็กหรือตัวเลข 4-30 ตัวอักษรเท่านั้น");
+      return;
+    }
+    if (!displayName) {
+      setMessage("กรุณาระบุชื่อแสดงผล");
+      return;
+    }
+    try {
+      await api.patch(
+        `/admin/users/${selectedUser.id}`,
+        {
+          username: form.get("username"),
+          email: form.get("email"),
+          donationNotificationEmail: form.get("donationNotificationEmail"),
+          role: form.get("role"),
+          accountStatus: form.get("accountStatus") === "ACTIVE" ? "APPROVED" : form.get("accountStatus"),
+          page: {
+            slug,
+            displayName,
+            handle: normalizeLimitedText(form.get("handle")),
+          },
         },
-      },
-      { headers: authHeaders("admin") },
-    );
-    setMessage("บันทึกข้อมูล User สำเร็จ");
-    setSelectedUser(null);
-    await loadUsers();
+        { headers: authHeaders("admin") },
+      );
+      setMessage("บันทึกข้อมูล User สำเร็จ");
+      setSelectedUser(null);
+      await loadUsers();
+    } catch (error) {
+      setMessage((error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "บันทึกข้อมูล User ไม่สำเร็จ");
+    }
   }
 
   async function resetPassword(user: UserRow) {
@@ -590,15 +613,7 @@ export default function AdminPage() {
                   >
                     Previous
                   </button>
-                  <select
-                    className="input h-9 min-h-9 w-32 py-1 text-sm"
-                    value={safeTransactionPage}
-                    onChange={(event) => setTransactionPage(Number(event.target.value))}
-                  >
-                    {Array.from({ length: totalTransactionPages }, (_, index) => (
-                      <option key={index + 1} value={index + 1}>Page {index + 1}</option>
-                    ))}
-                  </select>
+                  <span className="text-sm text-white/60">Page {safeTransactionPage} / {totalTransactionPages}</span>
                   <button
                     className="btn h-9 min-h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={safeTransactionPage >= totalTransactionPages}
@@ -685,11 +700,11 @@ export default function AdminPage() {
               {selectedUser.email !== undefined && (
                 <form onSubmit={saveUser} className="grid gap-4 md:grid-cols-2">
                   <label>Username<input className="input mt-2" name="username" defaultValue={selectedUser.username} required /></label>
-                  <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" defaultValue={selectedUser.page?.displayName ?? ""} /></label>
+                  <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" maxLength={MAX_CREATOR_FIELD_LENGTH} defaultValue={selectedUser.page?.displayName ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.slice(0, MAX_CREATOR_FIELD_LENGTH); }} /></label>
                   <label>Email<input className="input mt-2" name="email" type="email" defaultValue={selectedUser.email} required /></label>
                   <label>Email แจ้งเตือนโดเนท<input className="input mt-2" name="donationNotificationEmail" type="email" defaultValue={selectedUser.donationNotificationEmail ?? ""} /></label>
-                  <label>Handle<input className="input mt-2" name="handle" maxLength={20} defaultValue={selectedUser.page?.handle ?? ""} /></label>
-                  <label>URL หน้าโดเนท<input className="input mt-2" name="slug" defaultValue={selectedUser.page?.slug ?? ""} /></label>
+                  <label>Handle<input className="input mt-2" name="handle" maxLength={MAX_CREATOR_FIELD_LENGTH} defaultValue={selectedUser.page?.handle ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.slice(0, MAX_CREATOR_FIELD_LENGTH); }} /></label>
+                  <label>URL หน้าโดเนท<input className="input mt-2" name="slug" maxLength={MAX_CREATOR_FIELD_LENGTH} pattern="[a-z0-9]{4,30}" defaultValue={selectedUser.page?.slug ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_CREATOR_FIELD_LENGTH); }} /><span className="mt-2 block text-xs text-white/55">4-30 lowercase letters and numbers only</span></label>
                   <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option><option>ACCOUNTING</option></select></label>
                   <label>Status<select className="input mt-2" name="accountStatus" defaultValue={displayUserStatus(selectedUser)}><option>ACTIVE</option><option>SUSPENDED</option><option>PENDING</option></select></label>
                   <button className="btn btn-primary md:col-span-2" type="submit">บันทึกข้อมูล User</button>

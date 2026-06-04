@@ -18,10 +18,11 @@ type Profile = {
   } | null;
 };
 
-const slugPattern = /^[a-z0-9]{4,20}$/;
+const MAX_CREATOR_FIELD_LENGTH = 30;
+const slugPattern = /^[a-z0-9]{4,30}$/;
 
 function normalizeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_CREATOR_FIELD_LENGTH);
 }
 
 function apiMessage(error: unknown) {
@@ -58,7 +59,7 @@ export default function CreatorOnboardingPage() {
   }, [slug]);
   const slugValid = slugPattern.test(slug);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail);
-  const canSubmit = displayName.trim().length >= 2 && slugValid && emailValid;
+  const canSubmit = displayName.trim().length >= 2 && displayName.trim().length <= MAX_CREATOR_FIELD_LENGTH && slugValid && emailValid;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,7 +68,7 @@ export default function CreatorOnboardingPage() {
     setError("");
     try {
       const { data } = await api.post("/settings/onboarding", {
-        displayName: displayName.trim(),
+        displayName: displayName.trim().slice(0, MAX_CREATOR_FIELD_LENGTH),
         slug,
         donationNotificationEmail: notificationEmail.trim(),
       }, { headers: authHeaders() });
@@ -100,7 +101,8 @@ export default function CreatorOnboardingPage() {
         <form onSubmit={submit} className="card mt-8 grid gap-5 p-5">
           <label>
             {t("ชื่อครีเอเตอร์", "Creator Name")}
-            <input className="input mt-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
+            <input className="input mt-2" value={displayName} maxLength={MAX_CREATOR_FIELD_LENGTH} onChange={(event) => setDisplayName(event.target.value.slice(0, MAX_CREATOR_FIELD_LENGTH))} required />
+            <span className="mt-2 block text-sm text-white/60">{displayName.length}/{MAX_CREATOR_FIELD_LENGTH}</span>
           </label>
           <label>
             {t("Username URL หน้าโดเนท", "Donation Page Username URL")}
@@ -111,7 +113,7 @@ export default function CreatorOnboardingPage() {
               placeholder="bunniesch"
               required
             />
-            <span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น</span>
+            <span className="mt-2 block text-sm text-white/60">4-30 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น</span>
           </label>
           <label>
             {t("URL หน้าโดเนท", "Donation Page URL")}

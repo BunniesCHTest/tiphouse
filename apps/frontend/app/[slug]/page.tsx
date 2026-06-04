@@ -38,6 +38,7 @@ type DonateStep = "form" | "summary" | "qr" | "success";
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const rankMedals = ["🥇", "🥈", "🥉"];
 const quickAmounts = [50, 100, 300, 500, 1000];
+const MAX_DONOR_NAME_LENGTH = 20;
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
@@ -130,7 +131,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     try {
       const { data } = await api.post("/donate", {
         pageSlug: page.slug,
-        donorName,
+        donorName: donorName.slice(0, MAX_DONOR_NAME_LENGTH),
         message: formState.message.trim(),
         amount: amountNumber,
         anonymous,
@@ -308,11 +309,13 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                     className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
                     name="donorName"
                     value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
-                    onChange={(event) => setFormState({ ...formState, donorName: event.target.value })}
+                    maxLength={MAX_DONOR_NAME_LENGTH}
+                    onChange={(event) => setFormState({ ...formState, donorName: event.target.value.slice(0, MAX_DONOR_NAME_LENGTH) })}
                     disabled={formState.anonymous}
                     required={!formState.anonymous}
                   />
                 </label>
+                {!formState.anonymous && <p className="text-right text-sm text-white/55">{formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</p>}
                 {blockedName && <p className="text-sm font-bold text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
                 <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
                   แสดงเป็น Anonymous

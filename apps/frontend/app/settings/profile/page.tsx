@@ -50,6 +50,8 @@ export default function ProfileSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [reviewPopup, setReviewPopup] = useState<ApprovalRequest | null>(null);
+  const usernameValid = /^[a-z0-9]{4,30}$/.test(username.trim());
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   async function load() {
     const { data } = await api.get("/settings/profile", { headers: authHeaders() });
@@ -72,6 +74,10 @@ export default function ProfileSettingsPage() {
     event.preventDefault();
     setMessage("");
     setError("");
+    if (!usernameValid || !emailValid) {
+      setError("กรุณาระบุ Username และ Email ให้ถูกต้องก่อนบันทึก");
+      return;
+    }
     try {
       await api.patch("/settings/profile", { username: username.trim(), email: email.trim() }, { headers: authHeaders() });
       await load();
@@ -142,13 +148,15 @@ export default function ProfileSettingsPage() {
             <form onSubmit={save} className="grid gap-4">
               <label>
                 Username
-                <input className="input mt-2" value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20))} required />
-                <span className="mt-2 block text-sm text-white/60">4-20 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น</span>
+                <input className={`input mt-2 ${username && !usernameValid ? "border-coral text-coral" : ""}`} value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30))} required />
+                <span className="mt-2 block text-sm text-white/60">4-30 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น</span>
+                {username && !usernameValid && <span className="mt-2 block text-sm font-bold text-coral">Username ต้องเป็นตัวพิมพ์เล็กหรือตัวเลข 4-30 ตัวอักษร</span>}
               </label>
               <label>
                 Email
-                <input className="input mt-2" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                <input className={`input mt-2 ${email && !emailValid ? "border-coral text-coral" : ""}`} name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
                 <span className="mt-2 block text-sm text-white/60">{t("ใช้รับการติดต่อจาก TipHouse เท่านั้น", "Used only for TipHouse contact.")}</span>
+                {email && !emailValid && <span className="mt-2 block text-sm font-bold text-coral">กรุณาระบุ Email ให้ถูกต้อง เช่น name@example.com</span>}
               </label>
               <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/65">
                 การเปลี่ยน Username หรือ Email จะยังไม่เปลี่ยนทันที ต้องได้รับการอนุมัติจาก Admin ก่อน
@@ -165,7 +173,7 @@ export default function ProfileSettingsPage() {
               )}
               {message && <p className="text-mint">{message}</p>}
               {error && <p className="text-coral">{error}</p>}
-              <button className="btn btn-primary" type="submit">{t("ส่งคำขอเปลี่ยนแปลง", "Submit Change Request")}</button>
+              <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!usernameValid || !emailValid}>{t("ส่งคำขอเปลี่ยนแปลง", "Submit Change Request")}</button>
             </form>
           )}
         </section>

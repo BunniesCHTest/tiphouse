@@ -276,7 +276,14 @@ export default function DashboardPage() {
 
             <section className="card mt-5 p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
-                <h2 className="pt-1 text-2xl font-black leading-none">{t("สถิติรายได้", "Revenue Analytics")}</h2>
+                <div className="max-w-md">
+                  <h2 className="pt-1 text-2xl font-black leading-none">{t("สถิติรายได้", "Revenue Analytics")}</h2>
+                  {usingFallbackRows && (
+                    <p className="mt-3 text-sm text-gold">
+                      {t("ไม่พบรายการโดเนทที่มีวันที่อยู่ในช่วง From/To ที่เลือก จึงแสดงรายการล่าสุดแทนเพื่อไม่ให้กราฟว่าง", "No donations were found inside the selected From/To date range, so the latest records are shown to keep the chart visible.")}
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-end gap-3 text-sm">
                   <label className="grid gap-1">
                     <span>View By</span>
@@ -292,9 +299,6 @@ export default function DashboardPage() {
                   <button className="btn h-12" type="button" onClick={clearDashboardFilters}>CLEAR</button>
                 </div>
               </div>
-              {usingFallbackRows && (
-                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก จึงแสดงรายการล่าสุดแทน", "No data in the selected date range, showing latest records instead.")}</p>
-              )}
               <div className="mt-5 flex h-72 items-end gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {bars.length ? bars.map((bar) => (
                   <div key={bar.label} className="flex h-full flex-1 min-w-0 flex-col justify-end gap-2 text-center">
@@ -381,14 +385,10 @@ export default function DashboardPage() {
               </tbody>
             </table>
             {visibleRows.length > PAGE_SIZE && (
-              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-4 text-sm text-white/70">
-                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeTransactionPage <= 1} onClick={() => setTransactionPage((page) => Math.max(1, page - 1))}>Previous</button>
-                <select className="input h-9 w-32 py-1 text-sm" value={safeTransactionPage} onChange={(event) => setTransactionPage(Number(event.target.value))}>
-                  {Array.from({ length: transactionPages }, (_, index) => (
-                    <option key={index + 1} value={index + 1}>Page {index + 1}</option>
-                  ))}
-                </select>
-                <button className="btn h-9 min-h-9 px-3 text-xs" type="button" disabled={safeTransactionPage >= transactionPages} onClick={() => setTransactionPage((page) => Math.min(transactionPages, page + 1))}>Next</button>
+              <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4 text-sm text-white/70">
+                <button className="btn h-9 min-h-9 px-3 py-1" type="button" disabled={safeTransactionPage <= 1} onClick={() => setTransactionPage((page) => Math.max(1, page - 1))}>Previous</button>
+                <span className="text-sm text-white/60">Page {safeTransactionPage} / {transactionPages}</span>
+                <button className="btn h-9 min-h-9 px-3 py-1" type="button" disabled={safeTransactionPage >= transactionPages} onClick={() => setTransactionPage((page) => Math.min(transactionPages, page + 1))}>Next</button>
               </div>
             )}
           </section>

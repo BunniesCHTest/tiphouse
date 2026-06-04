@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { DonationStatus, PaymentProvider } from "@prisma/client";
 import * as argon2 from "argon2";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
@@ -70,6 +70,20 @@ export class AdminController {
     const pageData: any = {};
     for (const key of ["slug", "displayName", "handle", "donationAccountName", "minAmount", "goalAmount"]) {
       if (body.page?.[key] !== undefined) pageData[key] = body.page[key];
+    }
+    if (pageData.slug !== undefined) {
+      const slug = String(pageData.slug ?? "").trim().toLowerCase();
+      if (!/^[a-z0-9]{4,30}$/.test(slug)) {
+        throw new BadRequestException("Donation URL must be 4-30 lowercase letters or numbers");
+      }
+      pageData.slug = slug;
+    }
+    if (pageData.displayName !== undefined) {
+      pageData.displayName = String(pageData.displayName ?? "").trim().slice(0, 30);
+      if (!pageData.displayName) throw new BadRequestException("Display name is required");
+    }
+    if (pageData.handle !== undefined) {
+      pageData.handle = String(pageData.handle ?? "").trim().slice(0, 30);
     }
     const updated = await this.prisma.user.update({
       where: { id },

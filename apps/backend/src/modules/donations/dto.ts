@@ -1,12 +1,12 @@
 import { PaymentProvider } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsObject, IsOptional, IsString, Matches, Max, MaxLength, Min } from "class-validator";
 
 export class CreateDonationDto {
   @IsString()
   pageSlug!: string;
 
   @IsString()
-  @MaxLength(80)
+  @MaxLength(20)
   donorName!: string;
 
   @IsString()
@@ -28,14 +28,18 @@ export class CreateDonationDto {
 
 export class UpdateDonationPageDto {
   @IsString()
+  @MaxLength(30)
+  @Matches(/^[a-z0-9]{4,30}$/)
   @IsOptional()
   slug?: string;
 
   @IsString()
+  @MaxLength(30)
   @IsOptional()
   displayName?: string;
 
   @IsString()
+  @MaxLength(30)
   @IsOptional()
   handle?: string;
 

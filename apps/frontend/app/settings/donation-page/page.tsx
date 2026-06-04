@@ -35,6 +35,11 @@ const defaults: PageSettings = {
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_TEXT_LENGTH = 30;
+
+function normalizeDonationSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_TEXT_LENGTH);
+}
 
 function readFileAsDataUrl(file: File | null) {
   return new Promise<string | undefined>((resolve, reject) => {
@@ -96,9 +101,6 @@ export default function DonationPageSettings() {
     if (cached) {
       const parsed = { ...defaults, ...JSON.parse(cached) };
       cachedSettings = parsed;
-      setSettings(parsed);
-      if (parsed.bannerUrl) setBannerPreview(parsed.bannerUrl);
-      if (parsed.donationBackgroundUrl) setBackgroundPreview(parsed.donationBackgroundUrl);
     }
 
     api.get("/dashboard", { headers: authHeaders() }).then((res) => {
@@ -113,7 +115,12 @@ export default function DonationPageSettings() {
       cachePageSettings(page);
       if (page.bannerUrl) setBannerPreview(page.bannerUrl);
       if (page.donationBackgroundUrl) setBackgroundPreview(page.donationBackgroundUrl);
-    }).catch(() => undefined);
+    }).catch(() => {
+      if (!cachedSettings) return;
+      setSettings(cachedSettings);
+      if (cachedSettings.bannerUrl) setBannerPreview(cachedSettings.bannerUrl);
+      if (cachedSettings.donationBackgroundUrl) setBackgroundPreview(cachedSettings.donationBackgroundUrl);
+    });
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -139,11 +146,11 @@ export default function DonationPageSettings() {
       setSaving(false);
       return;
     }
-    const handle = String(form.get("handle") ?? "").trim().slice(0, 20);
+    const handle = String(form.get("handle") ?? "").trim().slice(0, MAX_TEXT_LENGTH);
     const payload = {
-      displayName: String(form.get("displayName") ?? "").trim(),
+      displayName: String(form.get("displayName") ?? "").trim().slice(0, MAX_TEXT_LENGTH),
       handle,
-      slug: String(form.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20),
+      slug: normalizeDonationSlug(String(form.get("slug") ?? "").trim()),
       quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
       bannerUrl,
       donationBackgroundUrl,
@@ -223,19 +230,19 @@ export default function DonationPageSettings() {
         <p className="font-bold text-mint">Donation Page Builder</p>
         <h1 className="mt-3 text-5xl font-black">{t("ตั้งค่าหน้าโดเนท", "Donation Page Settings")}</h1>
         <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
-          <label>{t("ชื่อครีเอเตอร์", "Creator Name")}<input className="input mt-2" name="displayName" value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value })} required /></label>
+          <label>{t("ชื่อครีเอเตอร์", "Creator Name")}<input className="input mt-2" name="displayName" maxLength={MAX_TEXT_LENGTH} value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value.slice(0, MAX_TEXT_LENGTH) })} required /><span className="mt-2 block text-sm text-white/60">{settings.displayName.length}/{MAX_TEXT_LENGTH}</span></label>
           <div className="grid gap-4 md:grid-cols-2">
             <label>
               Handle
-              <input className="input mt-2" name="handle" maxLength={20} value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value.slice(0, 20) })} required />
-              <span className="mt-2 block text-sm text-white/60">{settings.handle.length}/20</span>
+              <input className="input mt-2" name="handle" maxLength={MAX_TEXT_LENGTH} value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value.slice(0, MAX_TEXT_LENGTH) })} required />
+              <span className="mt-2 block text-sm text-white/60">{settings.handle.length}/{MAX_TEXT_LENGTH}</span>
             </label>
             <label>Quicklink URL<input className="input mt-2" name="quicklinkUrl" value={settings.quicklinkUrl} onChange={(event) => setSettings({ ...settings, quicklinkUrl: event.target.value })} placeholder="https://www.twitch.tv/..." /></label>
           </div>
           <label>
             {t("URL หน้าโดเนท", "Donation Page URL")}
-            <input className="input mt-2" name="slug" value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) })} required />
-            <span className="mt-2 block text-sm text-white/60">{t("4-20 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น", "4-20 characters. Lowercase letters and numbers only.")}</span>
+            <input className="input mt-2" name="slug" maxLength={MAX_TEXT_LENGTH} value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: normalizeDonationSlug(event.target.value) })} required />
+            <span className="mt-2 block text-sm text-white/60">{t("4-30 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น", "4-30 characters. Lowercase letters and numbers only.")}</span>
           </label>
           <div>
             <label className="font-bold">{t("รูป Banner", "Banner Image")}</label>

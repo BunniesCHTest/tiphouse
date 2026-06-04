@@ -180,8 +180,8 @@ export class DonationsService {
     const { donationBackgroundUrl, quicklinkUrl, theme, ...pageFields } = dto;
     if (dto.slug) {
       const slug = dto.slug.trim().toLowerCase();
-      if (!/^[a-z0-9]{4,20}$/.test(slug)) {
-        throw new BadRequestException("Donation URL must be 4-20 lowercase letters or numbers");
+      if (!/^[a-z0-9]{4,30}$/.test(slug)) {
+        throw new BadRequestException("Donation URL must be 4-30 lowercase letters or numbers");
       }
       const existing = await this.prisma.donationPage.findUnique({ where: { slug }, select: { userId: true } });
       if (existing && existing.userId !== userId) {

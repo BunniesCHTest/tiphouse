@@ -95,6 +95,7 @@ export class UpdateOverlayDto {
 
 export class UpdateProfileDto {
   @IsString()
+  @Matches(/^[a-z0-9]{4,30}$/)
   @IsOptional()
   username?: string;
 
@@ -110,11 +111,11 @@ export class UpdateProfileDto {
 export class CompleteCreatorOnboardingDto {
   @IsString()
   @MinLength(2)
-  @MaxLength(80)
+  @MaxLength(30)
   displayName!: string;
 
   @IsString()
-  @Matches(/^[a-z0-9]{4,20}$/)
+  @Matches(/^[a-z0-9]{4,30}$/)
   slug!: string;
 
   @IsEmail()

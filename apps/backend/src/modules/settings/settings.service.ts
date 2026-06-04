@@ -60,8 +60,8 @@ export class SettingsService {
     };
 
     if (nextUsername && nextUsername !== current.username) {
-      if (!/^[a-z0-9]{4,20}$/.test(nextUsername)) {
-        throw new BadRequestException("Username must be 4-20 lowercase letters or numbers");
+      if (!/^[a-z0-9]{4,30}$/.test(nextUsername)) {
+        throw new BadRequestException("Username must be 4-30 lowercase letters or numbers");
       }
       const existing = await this.prisma.user.findUnique({ where: { username: nextUsername }, select: { id: true } });
       if (existing && existing.id !== userId) {
@@ -93,8 +93,8 @@ export class SettingsService {
     const slug = dto.slug.trim().toLowerCase();
     const donationNotificationEmail = dto.donationNotificationEmail?.trim().toLowerCase() || null;
 
-    if (!/^[a-z0-9]{4,20}$/.test(slug)) {
-      throw new BadRequestException("Donation URL must be 4-20 lowercase letters or numbers");
+    if (!/^[a-z0-9]{4,30}$/.test(slug)) {
+      throw new BadRequestException("Donation URL must be 4-30 lowercase letters or numbers");
     }
 
     const [slugOwner, usernameOwner] = await Promise.all([
