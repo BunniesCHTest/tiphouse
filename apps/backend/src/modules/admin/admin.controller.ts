@@ -22,6 +22,33 @@ export class AdminController {
     if (user.role !== "ADMIN" && user.role !== "ACCOUNTING") throw new ForbiddenException("admin or accounting role required");
   }
 
+  private async importOwner() {
+    const passwordHash = await argon2.hash(`system-${Date.now()}-${Math.random()}`);
+    return this.prisma.user.upsert({
+      where: { username: "__tiphouse_imports" },
+      update: {},
+      create: {
+        username: "__tiphouse_imports",
+        email: "imports@tiphouse.local",
+        passwordHash,
+        role: "USER",
+        accountStatus: "APPROVED",
+        creatorSetupCompleted: true,
+        page: {
+          create: {
+            slug: "admin-imports",
+            displayName: "Admin Imports",
+            handle: "@admin-imports",
+            minAmount: 1,
+            goalAmount: 20000,
+            theme: {},
+          },
+        },
+      },
+      include: { page: true },
+    });
+  }
+
   @Get("overview")
   async overview(@CurrentUser() user: JwtUser) {
     this.requireAdmin(user);
@@ -37,8 +64,10 @@ export class AdminController {
   async users(@CurrentUser() user: JwtUser, @Query("q") q?: string) {
     this.requireAdmin(user);
     const users = await this.prisma.user.findMany({
-      where: q
-        ? {
+      where: {
+        username: { not: "__tiphouse_imports" },
+        ...(q
+          ? {
             OR: [
               { username: { contains: q, mode: "insensitive" } },
               { email: { contains: q, mode: "insensitive" } },
@@ -46,9 +75,10 @@ export class AdminController {
               { page: { slug: { contains: q, mode: "insensitive" } } },
             ],
           }
-        : undefined,
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
-      include: { page: true, payout: true, overlay: true, _count: { select: { donations: true, approvals: true } } },
+      include: { page: true, overlay: true },
     });
     return users.map((item) => {
       const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
@@ -58,6 +88,21 @@ export class AdminController {
         streamlabsUsername: streamlabs?.username ?? null,
       };
     });
+  }
+
+  @Get("users/:id")
+  async userDetail(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    this.requireAdmin(user);
+    const item = await this.prisma.user.findUniqueOrThrow({
+      where: { id },
+      include: { page: true, payout: true, overlay: true },
+    });
+    const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
+    return {
+      ...item,
+      authProvider: streamlabs?.connected ? "Streamlabs" : "Email",
+      streamlabsUsername: streamlabs?.username ?? null,
+    };
   }
 
   @Patch("users/:id")
@@ -126,7 +171,7 @@ export class AdminController {
     @Query("userId") userId?: string,
   ) {
     this.requireStaff(user);
-    return this.prisma.donation.findMany({
+    const rows = await this.prisma.donation.findMany({
       where: {
         userId: userId || undefined,
         paymentStatus: status ? (status as any) : undefined,
@@ -144,6 +189,10 @@ export class AdminController {
       take: 500,
       include: { user: { select: { id: true, username: true, email: true } }, page: { select: { slug: true, displayName: true } } },
     });
+    return rows.map((row) => ({
+      ...row,
+      source: row.qrPayload === "ADMIN_IMPORT" ? "import" : "tiphouse",
+    }));
   }
 
   @Post("transactions/import")
@@ -152,17 +201,8 @@ export class AdminController {
     const rows = Array.isArray(body?.rows) ? body.rows : [];
     if (!rows.length) throw new ForbiddenException("rows are required");
 
-    const creator = await this.prisma.user.findFirst({
-      where: {
-        role: "USER",
-        accountStatus: "APPROVED",
-        creatorSetupCompleted: true,
-        page: { isNot: null },
-      },
-      include: { page: true },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!creator?.page) throw new ForbiddenException("ยังไม่มี Creator ที่พร้อมรับ transaction import");
+    const creator = await this.importOwner();
+    if (!creator.page) throw new ForbiddenException("Cannot prepare import transaction owner");
 
     const created: Array<{ id: string }> = [];
     for (const row of rows.slice(0, 300)) {
@@ -170,7 +210,13 @@ export class AdminController {
       if (!Number.isFinite(amount) || amount < 1 || amount > 20000) continue;
       const paidAt = this.parseDate(row.date) ?? new Date();
       const provider = this.paymentProviderFromChannel(row.channel);
-      const reference: string = String(row.reference ?? "").trim() || `TH-IMPORT-${Date.now()}-${created.length + 1}`;
+      const rawReference = String(row.reference ?? "").trim();
+      const baseReference = rawReference || `TH-IMPORT-${Date.now()}-${created.length + 1}`;
+      const existingReference = await this.prisma.donation.findUnique({
+        where: { transactionRef: baseReference },
+        select: { id: true },
+      });
+      const reference = existingReference ? `${baseReference}-${Date.now()}-${created.length + 1}` : baseReference;
       const donation = await this.prisma.donation.create({
         data: {
           userId: creator.id,
@@ -182,6 +228,7 @@ export class AdminController {
           paymentStatus: DonationStatus.PAID,
           paymentProvider: provider,
           transactionRef: reference,
+          qrPayload: "ADMIN_IMPORT",
           paidAt,
           createdAt: paidAt,
         },
@@ -204,7 +251,7 @@ export class AdminController {
     const overlay = donation.page.user.overlay ?? donation.user.overlay;
     if (!overlay?.streamerKey) return { ok: false, message: "Creator has no overlay URL" };
     this.overlay.emitPaidDonation(overlay.streamerKey, {
-      donorName: donation.anonymous ? "บุคคลนิรนาม" : donation.donorName,
+      donorName: donation.anonymous ? "เธเธธเธเธเธฅเธเธดเธฃเธเธฒเธก" : donation.donorName,
       amount: donation.amount,
       message: donation.message,
       anonymous: donation.anonymous,
@@ -216,6 +263,34 @@ export class AdminController {
       },
     });
     return { ok: true };
+  }
+
+  @Delete("transactions/:id")
+  async deleteTransaction(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    this.requireStaff(user);
+    const donation = await this.prisma.donation.findUniqueOrThrow({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        donorName: true,
+        amount: true,
+        transactionRef: true,
+        paymentProvider: true,
+        paymentStatus: true,
+        createdAt: true,
+      },
+    });
+    await this.prisma.adminLog.create({
+      data: {
+        adminId: user.sub,
+        action: "DELETE_TRANSACTION",
+        targetId: donation.id,
+        metadata: donation,
+      },
+    });
+    await this.prisma.donation.delete({ where: { id } });
+    return { ok: true, deleted: donation };
   }
 
   @Get("transactions/user/:id")

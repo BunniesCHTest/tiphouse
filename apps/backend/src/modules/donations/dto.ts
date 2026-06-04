@@ -68,7 +68,7 @@ export class UpdateDonationPageDto {
   donationBackgroundUrl?: string;
 
   @IsInt()
-  @Min(1)
+  @Min(10)
   @IsOptional()
   minAmount?: number;
 

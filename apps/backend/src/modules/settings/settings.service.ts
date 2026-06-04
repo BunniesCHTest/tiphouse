@@ -48,6 +48,11 @@ export class SettingsService {
     return profile ? { ...profile, approvals } : null;
   }
 
+  async getPage(userId: string) {
+    await this.ensureApproved(userId);
+    return this.prisma.donationPage.findUnique({ where: { userId } });
+  }
+
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const nextUsername = dto.username?.trim();

@@ -44,6 +44,7 @@ type DonationRow = {
   transactionRef?: string | null;
   createdAt: string;
   paidAt?: string | null;
+  source?: "tiphouse" | "import";
   user?: { id: string; username: string; email: string };
   page?: { slug: string; displayName: string };
 };
@@ -181,6 +182,69 @@ function rowsToImportPayload(rows: string[][]) {
     message: indexes.message >= 0 ? row[indexes.message] : "",
     reference: indexes.reference >= 0 ? row[indexes.reference] : "",
   })).filter((row) => row.name && row.amount > 0);
+}
+
+async function inflateZipEntry(bytes: Uint8Array) {
+  if (!("DecompressionStream" in window)) {
+    throw new Error("This browser cannot read .xlsx files directly. Please save the sheet as CSV and import again.");
+  }
+  const payload = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const stream = new Blob([payload]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new TextDecoder("utf-8").decode(await new Response(stream).arrayBuffer());
+}
+
+async function readZipXmlEntries(buffer: ArrayBuffer, wanted: string[]) {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  const entries = new Map<string, string>();
+  for (let offset = 0; offset + 30 < bytes.length;) {
+    if (view.getUint32(offset, true) !== 0x04034b50) {
+      offset += 1;
+      continue;
+    }
+    const compression = view.getUint16(offset + 8, true);
+    const compressedSize = view.getUint32(offset + 18, true);
+    const fileNameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + fileNameLength + extraLength;
+    const name = new TextDecoder("utf-8").decode(bytes.slice(nameStart, nameStart + fileNameLength));
+    const data = bytes.slice(dataStart, dataStart + compressedSize);
+    if (wanted.includes(name)) {
+      entries.set(name, compression === 0 ? new TextDecoder("utf-8").decode(data) : await inflateZipEntry(data));
+    }
+    offset = dataStart + compressedSize;
+  }
+  return entries;
+}
+
+function parseSheetXml(sheetXml: string, sharedStrings: string[]) {
+  const xml = new DOMParser().parseFromString(sheetXml, "application/xml");
+  return Array.from(xml.querySelectorAll("sheetData row")).map((row) => {
+    const values: string[] = [];
+    Array.from(row.querySelectorAll("c")).forEach((cell, index) => {
+      const ref = cell.getAttribute("r") ?? "";
+      const column = ref.match(/[A-Z]+/)?.[0] ?? "";
+      const columnIndex = column ? column.split("").reduce((sum, char) => sum * 26 + char.charCodeAt(0) - 64, 0) - 1 : index;
+      const raw = cell.querySelector("v")?.textContent ?? "";
+      const type = cell.getAttribute("t");
+      values[columnIndex] = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw;
+    });
+    return values;
+  });
+}
+
+async function parseXlsxImport(file: File) {
+  const entries = await readZipXmlEntries(await file.arrayBuffer(), [
+    "xl/sharedStrings.xml",
+    "xl/worksheets/sheet1.xml",
+  ]);
+  const sharedXml = entries.get("xl/sharedStrings.xml") ?? "";
+  const sharedDoc = sharedXml ? new DOMParser().parseFromString(sharedXml, "application/xml") : null;
+  const sharedStrings = sharedDoc ? Array.from(sharedDoc.querySelectorAll("si")).map((si) => si.textContent ?? "") : [];
+  const sheetXml = entries.get("xl/worksheets/sheet1.xml");
+  if (!sheetXml) throw new Error("Sheet1 not found");
+  return rowsToImportPayload(parseSheetXml(sheetXml, sharedStrings));
 }
 
 export default function AdminPage() {
@@ -350,6 +414,17 @@ export default function AdminPage() {
     await loadUsers();
   }
 
+  async function openUserEditor(user: UserRow) {
+    setMessage("");
+    setSelectedUser(user);
+    try {
+      const { data } = await api.get(`/admin/users/${user.id}`, { headers: authHeaders("admin") });
+      setSelectedUser(data);
+    } catch {
+      setMessage("โหลดรายละเอียด User ไม่สำเร็จ");
+    }
+  }
+
   async function showUserHistory(user: UserRow) {
     setSelectedUser(null);
     setHistoryUser(user);
@@ -373,8 +448,9 @@ export default function AdminPage() {
     setImporting(true);
     setMessage("");
     try {
-      const text = await file.text();
-      const rows = parseTransactionImport(text);
+      const rows = file.name.toLowerCase().endsWith(".xlsx")
+        ? await parseXlsxImport(file)
+        : parseTransactionImport(await file.text());
       if (!rows.length) {
         setMessage("ไม่พบข้อมูลสำหรับ import กรุณาใช้คอลัมน์ วันที่, ชื่อ, จำนวนเงิน, ช่องทาง, ข้อความ");
         return;
@@ -383,8 +459,10 @@ export default function AdminPage() {
       setMessage(`Import สำเร็จ ${data.imported ?? 0} รายการ`);
       setTransactionPage(1);
       await loadTransactions();
-    } catch {
-      setMessage("Import ไม่สำเร็จ กรุณาตรวจสอบไฟล์และคอลัมน์ข้อมูล");
+    } catch (error) {
+      const detail = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      const text = Array.isArray(detail) ? detail.join(", ") : detail;
+      setMessage(text || "Import ไม่สำเร็จ กรุณาตรวจสอบไฟล์และคอลัมน์ข้อมูล");
     } finally {
       setImporting(false);
     }
@@ -395,6 +473,16 @@ export default function AdminPage() {
     setMessage(`ส่ง Alert ซ้ำแล้ว: ${row.transactionRef ?? row.id}`);
   }
 
+  async function deleteTransaction(row: DonationRow) {
+    const label = row.transactionRef ?? `${row.donorName} / ฿${row.amount.toLocaleString()}`;
+    if (!window.confirm(`Delete transaction ${label}? This will remove the transaction from history.`)) return;
+    await api.delete(`/admin/transactions/${row.id}`, { headers: authHeaders("admin") });
+    setMessage(`Deleted transaction: ${label}`);
+    setTransactions((current) => current.filter((item) => item.id !== row.id));
+    setUserTransactions((current) => current.filter((item) => item.id !== row.id));
+    await loadTransactions();
+  }
+
   const totalRevenue = useMemo(() => transactions.reduce((sum, row) => sum + (row.paymentStatus === "PAID" ? row.amount : 0), 0), [transactions]);
   const totalTransactionPages = Math.max(1, Math.ceil(transactions.length / TRANSACTION_PAGE_SIZE));
   const safeTransactionPage = Math.min(transactionPage, totalTransactionPages);
@@ -402,6 +490,9 @@ export default function AdminPage() {
     (safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE,
     safeTransactionPage * TRANSACTION_PAGE_SIZE,
   );
+  const transactionEmptyMessage = query.trim() || status
+    ? "ไม่พบรายการ Transaction ตามเงื่อนไขที่ค้นหา"
+    : "ยังไม่มีรายการ Transaction ในระบบ";
   const approvalQuery = query.trim().toLowerCase();
   const filteredApprovals = useMemo(() => approvals.filter((row) => {
     if (!approvalQuery) return true;
@@ -520,7 +611,7 @@ export default function AdminPage() {
               <input
                 className="hidden"
                 type="file"
-                accept=".csv,.tsv,.xls,.html,.txt"
+                accept=".xlsx,.csv,.tsv,.xls,.html,.txt"
                 disabled={importing}
                 onChange={(event) => importExcelFile(event.target.files?.[0] ?? null)}
               />
@@ -558,7 +649,7 @@ export default function AdminPage() {
                     <td>{user.role}</td>
                     <td>/{user.page?.slug}</td>
                     <td className="flex gap-2 py-2">
-                      <button className="btn" onClick={() => setSelectedUser(user)} type="button">แก้ไข</button>
+                      <button className="btn" onClick={() => openUserEditor(user)} type="button">แก้ไข</button>
                       <button className="btn" onClick={() => showUserHistory(user)} type="button">ประวัติ</button>
                       {(user.role === "ADMIN" || user.role === "ACCOUNTING") && <button className="btn" onClick={() => resetPassword(user)} type="button">Reset Password</button>}
                       {user.id !== adminUserId && <button className="btn border-coral/50 text-coral" onClick={() => deleteUser(user)} type="button">Delete</button>}
@@ -575,7 +666,7 @@ export default function AdminPage() {
             <div className="mb-4 text-white/70">ยอดโอนสำเร็จในรายการที่กรอง: <strong className="text-mint">฿{totalRevenue.toLocaleString()}</strong></div>
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="text-white/55">
-                <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th></tr>
+                <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th><th>Delete</th></tr>
               </thead>
               <tbody>
                 {pagedTransactions.map((row) => (
@@ -591,9 +682,21 @@ export default function AdminPage() {
                       ) : "-"}
                     </td>
                     <td>฿{row.amount.toLocaleString()}</td>
-                    <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button></td>
+                    <td>
+                      {row.source === "import"
+                        ? <span className="text-white/40">-</span>
+                        : <button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button>}
+                    </td>
+                    <td><button className="btn h-9 min-h-9 border-coral/50 px-3 text-xs text-coral" type="button" onClick={() => deleteTransaction(row)}>Delete</button></td>
                   </tr>
                 ))}
+                {!pagedTransactions.length && (
+                  <tr>
+                    <td className="border-t border-white/10 p-6 text-center text-white/55" colSpan={6}>
+                      {transactionEmptyMessage}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
             {transactions.length > TRANSACTION_PAGE_SIZE && (
@@ -767,7 +870,7 @@ export default function AdminPage() {
               <div className="overflow-auto">
                 <table className="w-full min-w-[900px] text-left text-sm">
                   <thead className="text-white/55">
-                    <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th></tr>
+                    <tr><th>วันที่</th><th>รายการ</th><th>เลขที่อ้างอิง</th><th>จำนวนเงิน</th><th>Alert</th><th>Delete</th></tr>
                   </thead>
                   <tbody>
                     {userTransactions.map((row) => (
@@ -783,10 +886,15 @@ export default function AdminPage() {
                           ) : "-"}
                         </td>
                         <td>฿{row.amount.toLocaleString()}</td>
-                        <td><button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button></td>
+                        <td>
+                          {row.source === "import"
+                            ? <span className="text-white/40">-</span>
+                            : <button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button>}
+                        </td>
+                        <td><button className="btn h-9 min-h-9 border-coral/50 px-3 text-xs text-coral" type="button" onClick={() => deleteTransaction(row)}>Delete</button></td>
                       </tr>
                     ))}
-                    {!userTransactions.length && <tr><td className="p-4 text-white/45" colSpan={5}>ยังไม่มี Transaction</td></tr>}
+                    {!userTransactions.length && <tr><td className="p-4 text-white/45" colSpan={6}>ยังไม่มี Transaction</td></tr>}
                   </tbody>
                 </table>
               </div>

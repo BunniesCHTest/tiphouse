@@ -14,6 +14,11 @@ export class SettingsController {
     return this.settings.getProfile(user.sub);
   }
 
+  @Get("page")
+  page(@CurrentUser() user: JwtUser) {
+    return this.settings.getPage(user.sub);
+  }
+
   @Patch("profile")
   updateProfile(@CurrentUser() user: JwtUser, @Body() dto: UpdateProfileDto) {
     return this.settings.updateProfile(user.sub, dto);

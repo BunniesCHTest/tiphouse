@@ -394,30 +394,23 @@ export default function OverlaySettingsPage() {
   }
 
   async function testOverlay() {
+    if (!settings.streamerKey) {
+      setError("ยังไม่มี Overlay URL กรุณารอโหลดข้อมูลหรือกด Reset Overlay URL");
+      return;
+    }
     const nextAlert = randomTestAlert();
     setPreviewAlert(nextAlert);
     localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
-    await api.post("/settings/overlay/test", {
-      ...overlayPayload(settings),
-      testDonorName: nextAlert.donorName,
-      testAmount: String(nextAlert.amount),
-      testMessage: nextAlert.message,
-    }, { headers: authHeaders() }).catch(() => undefined);
-  }
-
-  async function connectStreamlabs() {
-    setError("");
-    setNotice("");
     try {
-      const { data } = await api.get("/auth/streamlabs/connect", { headers: authHeaders() });
-      if (!data?.configured || !data?.url) {
-        const missing = Array.isArray(data?.missing) && data.missing.length ? ` ขาด: ${data.missing.join(", ")}` : "";
-        setError(`ยังไม่ได้ตั้งค่า Streamlabs OAuth ใน backend.${missing}`);
-        return;
-      }
-      window.location.href = data.url;
+      await api.post("/settings/overlay/test", {
+        ...overlayPayload(settings),
+        testDonorName: nextAlert.donorName,
+        testAmount: String(nextAlert.amount),
+        testMessage: nextAlert.message,
+      }, { headers: authHeaders() });
+      setNotice("ส่งทดสอบ Overlay แล้ว");
     } catch {
-      setError("เริ่มเชื่อมต่อ Streamlabs ไม่สำเร็จ กรุณา Login ใหม่");
+      setError("ส่งทดสอบ Overlay ไม่สำเร็จ กรุณาตรวจสอบว่า backend และ OBS Overlay URL เปิดอยู่");
     }
   }
 
@@ -459,9 +452,9 @@ export default function OverlaySettingsPage() {
             {settings.customSoundUrl && <button className="btn" type="button" onClick={() => setSettings({ ...settings, customSoundUrl: "" })}>ลบไฟล์เสียง</button>}
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
-            <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Streamlabs Alert Box สำหรับ Tips/Variation</label>
-            <button className="btn" type="button" onClick={connectStreamlabs}>{settings.streamlabsConnected ? "เชื่อมต่อ Streamlabs ใหม่" : "เชื่อมต่อ Streamlabs"}</button>
-            <p className="text-sm text-white/55">{settings.streamlabsConnected ? `เชื่อมต่อ Streamlabs แล้ว: ${settings.streamlabsUsername ?? "Streamlabs"}` : "ยังไม่ได้ Login ผ่าน Streamlabs จึงยังเปิดใช้งาน Alert Box Variation ไม่ได้"}</p>
+            <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Alert ของ Streamlabs</label>
+            <p className="text-sm text-white/55">{settings.streamlabsAlertBoxEnabled ? "เมื่อมีโดเนทจริง ระบบจะส่ง Alert ไปที่ Streamlabs Tips/Variation และยังส่งเข้า OBS Overlay ของ TipHouse ด้วย" : "ใช้ Alert Overlay ของ TipHouse เป็นหลัก"}</p>
+            {!settings.streamlabsConnected && <p className="text-sm text-coral">ยังไม่ได้เชื่อมต่อ Streamlabs จากขั้นตอน Login จึงยังเลือกใช้ Streamlabs Alert ไม่ได้</p>}
             <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" name="widgetHtml" value={settings.widgetHtml} onChange={(event) => setSettings({ ...settings, widgetHtml: event.target.value })} /></label>
             <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" name="widgetCss" value={settings.widgetCss} onChange={(event) => setSettings({ ...settings, widgetCss: event.target.value })} /></label>
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" name="widgetJs" value={settings.widgetJs} onChange={(event) => setSettings({ ...settings, widgetJs: event.target.value })} /></label>
