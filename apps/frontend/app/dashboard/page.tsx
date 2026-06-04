@@ -280,7 +280,7 @@ export default function DashboardPage() {
                   <h2 className="pt-1 text-2xl font-black leading-none">{t("สถิติรายได้", "Revenue Analytics")}</h2>
                   {usingFallbackRows && (
                     <p className="mt-3 text-sm text-gold">
-                      {t("ไม่พบรายการโดเนทที่มีวันที่อยู่ในช่วง From/To ที่เลือก จึงแสดงรายการล่าสุดแทนเพื่อไม่ให้กราฟว่าง", "No donations were found inside the selected From/To date range, so the latest records are shown to keep the chart visible.")}
+                      {t("ไม่มีรายการในช่วง From/To จึงแสดงรายการล่าสุดแทน", "No records were found in the From/To range, so the latest records are shown instead.")}
                     </p>
                   )}
                 </div>
