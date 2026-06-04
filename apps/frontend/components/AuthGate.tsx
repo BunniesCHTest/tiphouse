@@ -8,6 +8,29 @@ import { clearSession, getSession } from "@/lib/session";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "tiphouse_last_activity";
 
+function AppSkeleton() {
+  return (
+    <main className="min-h-screen px-4 py-8">
+      <section className="mx-auto grid w-[min(1200px,100%)] gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="h-12 w-64 animate-pulse rounded-2xl bg-white/10" />
+          <div className="flex gap-2">
+            <div className="h-10 w-24 animate-pulse rounded-xl bg-white/10" />
+            <div className="h-10 w-24 animate-pulse rounded-xl bg-white/10" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-28 animate-pulse rounded-2xl bg-white/10" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-white/10" />
+        <div className="grid gap-3">
+          {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-14 animate-pulse rounded-xl bg-white/10" />)}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export function AuthGate({ children, admin = false, allowPending = false }: { children: React.ReactNode; admin?: boolean; allowPending?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -54,7 +77,7 @@ export function AuthGate({ children, admin = false, allowPending = false }: { ch
     };
   }, [admin, allowed, router]);
 
-  if (!checked) return <main className="grid min-h-screen place-items-center">Loading...</main>;
+  if (!checked) return <AppSkeleton />;
 
   if (!allowed) {
     if (pendingApproval) {

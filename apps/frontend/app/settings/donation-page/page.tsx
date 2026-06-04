@@ -72,9 +72,11 @@ export default function DonationPageSettings() {
   const [status, setStatus] = useState<SaveStatus | null>(null);
 
   useEffect(() => {
+    let cachedSettings: PageSettings | null = null;
     const cached = localStorage.getItem(userCacheKey("page_settings"));
     if (cached) {
       const parsed = { ...defaults, ...JSON.parse(cached) };
+      cachedSettings = parsed;
       setSettings(parsed);
       if (parsed.bannerUrl) setBannerPreview(parsed.bannerUrl);
       if (parsed.donationBackgroundUrl) setBackgroundPreview(parsed.donationBackgroundUrl);
@@ -86,7 +88,7 @@ export default function DonationPageSettings() {
         ...defaults,
         ...res.data.page,
         quicklinkUrl: res.data.page?.theme?.quicklinkUrl ?? "",
-        donationBackgroundUrl: res.data.page?.theme?.donationBackgroundUrl ?? "",
+        donationBackgroundUrl: res.data.page?.theme?.donationBackgroundUrl ?? cachedSettings?.donationBackgroundUrl ?? "",
       };
       setSettings(page);
       localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));

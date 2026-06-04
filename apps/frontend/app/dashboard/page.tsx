@@ -118,6 +118,7 @@ function triggerOverlayAgain(item: HistoryRow) {
 export default function DashboardPage() {
   const { language, t } = useAppPreferences();
   const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [viewBy, setViewBy] = useState<ViewBy>("day");
   const [fromDate, setFromDate] = useState(defaultFromDate);
@@ -126,7 +127,11 @@ export default function DashboardPage() {
   const [transactionPage, setTransactionPage] = useState(1);
 
   useEffect(() => {
-    api.get("/dashboard", { headers: authHeaders() }).then((res) => setData(res.data)).catch(() => setData(null));
+    setLoading(true);
+    api.get("/dashboard", { headers: authHeaders() })
+      .then((res) => setData(res.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
   }, []);
 
   const donations = useMemo<Donation[]>(() => data?.donations ?? [], [data]);
@@ -169,7 +174,8 @@ export default function DashboardPage() {
     });
   }, [allRows, fromDate, toDate]);
 
-  const visibleRows = filteredRows;
+  const usingFallbackRows = !filteredRows.length && allRows.length > 0;
+  const visibleRows = filteredRows.length ? filteredRows : allRows;
   const revenue = visibleRows.reduce((sum, item) => sum + item.amount, 0);
   const highestDonation = visibleRows.reduce((max, item) => Math.max(max, item.amount), 0);
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
@@ -238,17 +244,28 @@ export default function DashboardPage() {
       <main className="mx-auto w-[min(1200px,calc(100%-2rem))] py-10">
         <p className="font-bold text-mint">Creator Dashboard</p>
         <h1 className="mt-3 text-5xl font-black">Dashboard</h1>
+        {loading && (
+          <section className="mt-8 grid gap-5">
+            <div className="grid gap-4 md:grid-cols-4">
+              {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-28 animate-pulse rounded-2xl bg-white/10" />)}
+            </div>
+            <div className="h-80 animate-pulse rounded-2xl bg-white/10" />
+            <div className="grid gap-3">
+              {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-14 animate-pulse rounded-xl bg-white/10" />)}
+            </div>
+          </section>
+        )}
 
-        <div className="mt-6 inline-flex rounded-2xl border border-white/10 bg-white/5 p-1">
+        {!loading && <div className="mt-6 inline-flex rounded-2xl border border-white/10 bg-white/5 p-1">
           <button className={`btn ${activeTab === "overview" ? "btn-primary" : ""}`} type="button" onClick={() => setActiveTab("overview")}>
             {t("ภาพรวมโดเนท", "Overview")}
           </button>
           <button className={`btn ${activeTab === "transactions" ? "btn-primary" : ""}`} type="button" onClick={() => setActiveTab("transactions")}>
             {t("หน้าธุรกรรม", "Transactions")}
           </button>
-        </div>
+        </div>}
 
-        {activeTab === "overview" && (
+        {!loading && activeTab === "overview" && (
           <>
             <section className="mt-8 grid gap-4 md:grid-cols-4">
               <div className="card p-5"><strong className="block text-3xl">{formatBaht(revenue)}</strong><span className="text-white/60">{t("รายได้ที่ชำระสำเร็จ", "Paid Revenue")}</span></div>
@@ -275,8 +292,8 @@ export default function DashboardPage() {
                   <button className="btn h-12" type="button" onClick={clearDashboardFilters}>CLEAR</button>
                 </div>
               </div>
-              {!filteredRows.length && allRows.length > 0 && (
-                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก", "No data in the selected date range")}</p>
+              {usingFallbackRows && (
+                <p className="mt-3 text-sm text-gold">{t("ไม่พบข้อมูลในช่วงวันที่ที่เลือก จึงแสดงรายการล่าสุดแทน", "No data in the selected date range, showing latest records instead.")}</p>
               )}
               <div className="mt-5 flex h-72 items-end gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {bars.length ? bars.map((bar) => (
@@ -346,7 +363,7 @@ export default function DashboardPage() {
           </>
         )}
 
-        {activeTab === "transactions" && (
+        {!loading && activeTab === "transactions" && (
           <section className="card mt-8 overflow-auto p-5">
             <h2 className="mb-4 text-2xl font-black">{t("หน้าธุรกรรม", "Transactions")}</h2>
             <table className="w-full min-w-[860px] text-left">

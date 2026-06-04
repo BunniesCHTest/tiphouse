@@ -19,6 +19,7 @@ type Profile = {
 type ApprovalRequest = {
   id: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  requestedEmail?: string | null;
   note?: string | null;
   createdAt: string;
   reviewedAt?: string | null;
@@ -92,16 +93,22 @@ export default function ProfileSettingsPage() {
               </h2>
               {(() => {
                 const detail = approvalDetails(reviewPopup);
+                const oldUsername = detail.oldUsername || profile?.username || "-";
+                const oldEmail = detail.oldEmail || profile?.donationNotificationEmail || profile?.email || "-";
+                const newUsername = detail.newUsername || "-";
+                const newEmail = detail.newEmail || reviewPopup.requestedEmail || "-";
+                const hasDetail = Boolean(detail.oldUsername || detail.oldEmail || detail.newUsername || detail.newEmail || reviewPopup.requestedEmail);
                 return (
                   <div className="mt-4 grid gap-3 text-sm">
                     <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="text-white/55">ข้อมูลเก่า</div>
-                      <div className="mt-1 font-bold">Username: {detail.oldUsername || "-"}<br />Email: {detail.oldEmail || "-"}</div>
+                      <div className="mt-1 font-bold">Username: {oldUsername}<br />Email: {oldEmail}</div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                       <div className="text-white/55">ข้อมูลใหม่</div>
-                      <div className="mt-1 font-bold">Username: {detail.newUsername || "-"}<br />Email: {detail.newEmail || "-"}</div>
+                      <div className="mt-1 font-bold">Username: {newUsername}<br />Email: {newEmail}</div>
                     </div>
+                    {!hasDetail && <p className="text-white/55">คำขอนี้เป็นข้อมูลเดิมที่ไม่มีรายละเอียดการเปลี่ยนแปลงในระบบ</p>}
                   </div>
                 );
               })()}
