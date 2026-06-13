@@ -95,7 +95,7 @@ export default function DonationPageSettings() {
   const [backgroundInputKey, setBackgroundInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<SaveStatus | null>(null);
-  const minAmountInvalid = settings.minAmount < MIN_DONATION_AMOUNT;
+  const [minAmountWarning, setMinAmountWarning] = useState(false);
 
   useEffect(() => {
     let cachedSettings: PageSettings | null = null;
@@ -103,6 +103,9 @@ export default function DonationPageSettings() {
     if (cached) {
       const parsed = { ...defaults, ...JSON.parse(cached) };
       cachedSettings = parsed;
+      setSettings(parsed);
+      if (parsed.bannerUrl) setBannerPreview(parsed.bannerUrl);
+      if (parsed.donationBackgroundUrl) setBackgroundPreview(parsed.donationBackgroundUrl);
     }
 
     api.get("/settings/page", { headers: authHeaders() }).then((res) => {
@@ -253,7 +256,7 @@ export default function DonationPageSettings() {
             {bannerPreview && (
               <div className="relative mt-3">
                 <img alt="Banner preview" src={bannerPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete banner image" title="Delete banner image" onClick={clearBanner}>×</button>
+                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete banner image" title="Delete banner image" onClick={clearBanner}>X</button>
               </div>
             )}
           </div>
@@ -264,28 +267,30 @@ export default function DonationPageSettings() {
             {backgroundPreview && (
               <div className="relative mt-3">
                 <img alt="Donation background preview" src={backgroundPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete donation background image" title="Delete donation background image" onClick={clearBackground}>×</button>
+                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete donation background image" title="Delete donation background image" onClick={clearBackground}>X</button>
               </div>
             )}
           </div>
           <label>
             {t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}
             <input
-              className={`input mt-2 ${minAmountInvalid ? "border-coral text-coral" : ""}`}
+              className={`input mt-2 ${minAmountWarning ? "border-coral text-coral" : ""}`}
               name="minAmount"
               type="number"
               min={MIN_DONATION_AMOUNT}
               value={settings.minAmount}
               onChange={(event) => {
                 const next = Number(event.target.value);
-                setSettings({ ...settings, minAmount: Number.isFinite(next) ? Math.max(MIN_DONATION_AMOUNT, next) : MIN_DONATION_AMOUNT });
+                const belowMinimum = Number.isFinite(next) && next < MIN_DONATION_AMOUNT;
+                setMinAmountWarning(belowMinimum);
+                setSettings({ ...settings, minAmount: belowMinimum || !Number.isFinite(next) ? MIN_DONATION_AMOUNT : next });
               }}
               onBlur={() => setSettings((current) => ({ ...current, minAmount: Math.max(MIN_DONATION_AMOUNT, Number(current.minAmount || MIN_DONATION_AMOUNT)) }))}
               required
             />
-            {minAmountInvalid && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 10 บาท</span>}
+            {minAmountWarning && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 10 บาท</span>}
           </label>
-          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountInvalid}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
+          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountWarning}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
         </form>
       </main>
     </AuthGate>

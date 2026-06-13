@@ -78,14 +78,33 @@ export class AdminController {
           : {}),
       },
       orderBy: { createdAt: "desc" },
-      include: { page: true, overlay: true },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        accountStatus: true,
+        creatorSetupCompleted: true,
+        donationNotificationEmail: true,
+        createdAt: true,
+        updatedAt: true,
+        page: {
+          select: {
+            slug: true,
+            displayName: true,
+            handle: true,
+            minAmount: true,
+            goalAmount: true,
+          },
+        },
+      },
     });
     return users.map((item) => {
-      const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
+      const streamlabsLogin = item.email.startsWith("streamlabs-") && item.email.endsWith("@tiphouse.local");
       return {
         ...item,
-        authProvider: streamlabs?.connected ? "Streamlabs" : "Email",
-        streamlabsUsername: streamlabs?.username ?? null,
+        authProvider: streamlabsLogin ? "Streamlabs" : "Email",
+        streamlabsUsername: streamlabsLogin ? item.username : null,
       };
     });
   }

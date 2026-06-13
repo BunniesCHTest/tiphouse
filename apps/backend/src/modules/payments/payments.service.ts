@@ -47,9 +47,9 @@ export class PaymentsService {
 
   private async finalizePaidDonation(transactionRef: string) {
     const donation = await this.donations.markPaid(transactionRef);
-    await this.forwardDonationToStreamlabs(donation);
+    const sentToStreamlabs = await this.forwardDonationToStreamlabs(donation);
     const streamerKey = donation.user.overlay?.streamerKey;
-    if (streamerKey) {
+    if (!sentToStreamlabs && streamerKey) {
       this.overlay.emitPaidDonation(streamerKey, {
         donationId: donation.id,
         donorName: donation.anonymous ? "Anonymous" : donation.donorName,
@@ -72,7 +72,7 @@ export class PaymentsService {
 
   private async forwardDonationToStreamlabs(donation: Awaited<ReturnType<DonationsService["markPaid"]>>) {
     const streamlabs = (donation.user.overlay?.theme as any)?.streamlabs;
-    if (!streamlabs?.connected || !streamlabs?.alertBoxEnabled || !streamlabs?.accessToken) return;
+    if (!streamlabs?.connected || !streamlabs?.alertBoxEnabled || !streamlabs?.accessToken) return false;
     const donorName = donation.anonymous ? "Anonymous" : donation.donorName;
     try {
       const response = await fetch("https://streamlabs.com/api/v2.0/donations", {
@@ -104,6 +104,7 @@ export class PaymentsService {
           },
         },
       });
+      return response.ok;
     } catch (error) {
       await this.prisma.webhookLog.create({
         data: {
@@ -113,6 +114,7 @@ export class PaymentsService {
           payload: { donationId: donation.id, error: error instanceof Error ? error.message : "unknown" },
         },
       });
+      return false;
     }
   }
 
