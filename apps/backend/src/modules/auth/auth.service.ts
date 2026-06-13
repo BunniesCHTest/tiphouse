@@ -1,11 +1,13 @@
-import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import type { Response } from "express";
+import Redis from "ioredis";
 import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AUTH_REDIS } from "./auth.constants";
 import { ChangePasswordDto, ConfirmPasswordResetDto, LoginDto, RegisterDto, RequestPasswordResetDto } from "./dto";
 
 type StreamlabsTokenResponse = {
@@ -42,6 +44,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    @Inject(AUTH_REDIS) private readonly redis: Redis,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -148,7 +151,7 @@ export class AuthService {
       }
       const user = await this.upsertStreamlabsUser(streamlabsUser, token);
       const tokens = await this.signTokens(user.id, user.email, user.role);
-      const exchangeCode = this.createStreamlabsExchangeCode({
+      const exchangeCode = await this.createStreamlabsExchangeCode({
         user: {
           id: user.id,
           email: user.email,
@@ -172,8 +175,22 @@ export class AuthService {
     }
   }
 
-  exchangeStreamlabsLogin(code: string) {
+  async exchangeStreamlabsLogin(code: string) {
     if (!code) throw new UnauthorizedException("Missing Streamlabs login code");
+    const redisKey = this.streamlabsExchangeKey(code);
+    try {
+      const pipeline = this.redis.multi();
+      pipeline.get(redisKey);
+      pipeline.del(redisKey);
+      const results = await pipeline.exec();
+      const serialized = results?.[0]?.[1];
+      if (typeof serialized === "string") {
+        return JSON.parse(serialized) as StreamlabsLoginExchange;
+      }
+    } catch (error) {
+      this.logger.warn(`Redis Streamlabs exchange read failed: ${error instanceof Error ? error.message : "unknown"}`);
+    }
+
     const entry = this.pendingStreamlabsLogins.get(code);
     this.pendingStreamlabsLogins.delete(code);
     if (!entry || entry.expiresAt < Date.now()) {
@@ -415,17 +432,26 @@ export class AuthService {
     return createHash("sha256").update(token).digest("hex");
   }
 
-  private createStreamlabsExchangeCode(payload: StreamlabsLoginExchange) {
+  private async createStreamlabsExchangeCode(payload: StreamlabsLoginExchange) {
     const now = Date.now();
     for (const [code, entry] of this.pendingStreamlabsLogins.entries()) {
       if (entry.expiresAt < now) this.pendingStreamlabsLogins.delete(code);
     }
     const code = randomBytes(24).toString("hex");
     this.pendingStreamlabsLogins.set(code, {
-      expiresAt: now + 60 * 1000,
+      expiresAt: now + 5 * 60 * 1000,
       payload,
     });
+    try {
+      await this.redis.set(this.streamlabsExchangeKey(code), JSON.stringify(payload), "EX", 5 * 60);
+    } catch (error) {
+      this.logger.warn(`Redis Streamlabs exchange write failed: ${error instanceof Error ? error.message : "unknown"}`);
+    }
     return code;
+  }
+
+  private streamlabsExchangeKey(code: string) {
+    return `tiphouse:auth:streamlabs:${code}`;
   }
 
   private publicStreamlabsError(reason: string) {

@@ -19,6 +19,7 @@ function LoginContent() {
       user_lookup: "Streamlabs login ไม่สำเร็จ: ได้ token แล้วแต่ดึงข้อมูลบัญชีไม่ได้ กรุณาตรวจ scope และสิทธิ์ของแอป",
       invalid_state: "Streamlabs login ไม่สำเร็จ: session สำหรับ OAuth หมดอายุ กรุณาลอง Login ใหม่",
       missing_code: "Streamlabs login ไม่สำเร็จ: Streamlabs ไม่ส่ง authorization code กลับมา",
+      exchange_expired: "Streamlabs login ไม่สำเร็จ: รหัสยืนยันหมดอายุหรือถูกใช้งานแล้ว กรุณากด Login ผ่าน Streamlabs ใหม่อีกครั้ง",
       unknown: "Streamlabs login ไม่สำเร็จ กรุณาตรวจ backend logs และค่า env ของ Streamlabs",
     };
     setStreamlabsMessage(messages[reason] ?? messages.unknown);

@@ -16,7 +16,7 @@ export default function StreamlabsCallbackPage() {
     window.history.replaceState(null, "", "/streamlabs/callback");
 
     if (!code) {
-      router.replace("/login?streamlabs=failed");
+      router.replace("/login?streamlabs=failed&reason=missing_code");
       return;
     }
 
@@ -29,7 +29,7 @@ export default function StreamlabsCallbackPage() {
       const needsOnboarding = !user.creatorSetupCompleted || String(user.username ?? "").startsWith("streamlabs-");
       router.replace(needsOnboarding ? "/onboarding" : user.accountStatus === "APPROVED" ? "/dashboard?streamlabs=connected" : "/settings/profile");
     }).catch(() => {
-      router.replace("/login?streamlabs=failed");
+      router.replace("/login?streamlabs=failed&reason=exchange_expired");
     });
   }, [router]);
 
