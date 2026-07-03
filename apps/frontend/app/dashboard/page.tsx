@@ -108,6 +108,7 @@ function formatGroupLabel(label: string, viewBy: ViewBy, language: string) {
 export default function DashboardPage() {
   const { language, t } = useAppPreferences();
   const [data, setData] = useState<any>(null);
+  const [streamlabsTips, setStreamlabsTips] = useState<StreamlabsTip[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [viewBy, setViewBy] = useState<ViewBy>("day");
@@ -119,14 +120,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setLoading(true);
-    api.get("/dashboard", { headers: authHeaders() })
+    const headers = authHeaders();
+    api.get("/dashboard", { headers })
       .then((res) => setData(res.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
+    api.get<StreamlabsTip[]>("/dashboard/streamlabs-tips", { headers })
+      .then((res) => setStreamlabsTips(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setStreamlabsTips([]));
   }, []);
 
   const donations = useMemo<Donation[]>(() => data?.donations ?? [], [data]);
-  const streamlabsTips = useMemo<StreamlabsTip[]>(() => data?.streamlabsTips ?? [], [data]);
 
   const allRows = useMemo<HistoryRow[]>(() => {
     const streamlabsRows = streamlabsTips.map((item) => ({

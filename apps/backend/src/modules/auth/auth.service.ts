@@ -284,12 +284,13 @@ export class AuthService {
 
     if (existing) {
       const overlay = existing.overlay;
-      await this.prisma.overlaySetting.upsert({
+      const updatedOverlay = await this.prisma.overlaySetting.upsert({
         where: { userId: existing.id },
         update: { theme: this.streamlabsTheme(streamlabsUser, token, overlay?.theme) as Prisma.InputJsonValue },
         create: { userId: existing.id, theme: this.streamlabsTheme(streamlabsUser, token, {}) as Prisma.InputJsonValue, animation: { position: "Center", durationSeconds: 7 } },
+        include: { user: true },
       });
-      return this.prisma.user.findUniqueOrThrow({ where: { id: existing.id } });
+      return updatedOverlay.user;
     }
 
     const username = await this.uniqueUsername(usernameBase || `streamlabs-${streamlabsId}`);
@@ -356,11 +357,20 @@ export class AuthService {
   private async findStreamlabsUser(streamlabsId: string, email: string) {
     const byEmail = await this.prisma.user.findUnique({ where: { email }, include: { overlay: true } });
     if (byEmail) return byEmail;
-    const users = await this.prisma.user.findMany({ include: { overlay: true } });
-    return users.find((user) => {
-      const theme = user.overlay?.theme as any;
-      return theme?.streamlabs?.userId === streamlabsId;
+    const byStreamlabsId = await this.prisma.overlaySetting.findFirst({
+      where: {
+        theme: {
+          path: ["streamlabs", "userId"],
+          equals: streamlabsId,
+        },
+      },
+      include: {
+        user: {
+          include: { overlay: true },
+        },
+      },
     });
+    return byStreamlabsId?.user ?? null;
   }
 
   private extractEmail(streamlabsUser: StreamlabsUserResponse) {

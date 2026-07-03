@@ -48,6 +48,12 @@ export class DonationsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get("dashboard/streamlabs-tips")
+  dashboardStreamlabsTips(@CurrentUser() user: JwtUser) {
+    return this.donations.dashboardStreamlabsTips(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch("settings/page")
   updatePage(@CurrentUser() user: JwtUser, @Body() dto: UpdateDonationPageDto) {
     return this.donations.updatePage(user.sub, dto);

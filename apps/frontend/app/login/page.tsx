@@ -6,6 +6,29 @@ import { Nav } from "@/components/Nav";
 import { api } from "@/lib/api";
 import { useAppPreferences } from "@/lib/app-preferences";
 
+type StreamlabsLoginPayload = {
+  configured: boolean;
+  url?: string | null;
+  missing?: string[];
+};
+
+let preparedLogin: { createdAt: number; request: Promise<StreamlabsLoginPayload> } | null = null;
+
+function prepareStreamlabsLogin() {
+  const now = Date.now();
+  if (preparedLogin && now - preparedLogin.createdAt < 8 * 60 * 1000) {
+    return preparedLogin.request;
+  }
+  const request = api.get<StreamlabsLoginPayload>("/auth/streamlabs", { timeout: 120_000 })
+    .then((response) => response.data)
+    .catch((error) => {
+      preparedLogin = null;
+      throw error;
+    });
+  preparedLogin = { createdAt: now, request };
+  return request;
+}
+
 function LoginContent() {
   const searchParams = useSearchParams();
   const { t } = useAppPreferences();
@@ -26,12 +49,18 @@ function LoginContent() {
     setStreamlabsMessage(messages[reason] ?? messages.unknown);
   }, [searchParams]);
 
+  useEffect(() => {
+    // Render Free may be asleep. Start waking the backend while the user is
+    // reading the login page so clicking Login can redirect immediately.
+    void prepareStreamlabsLogin().catch(() => undefined);
+  }, []);
+
   async function streamlabsLogin() {
     if (streamlabsLoading) return;
     setStreamlabsLoading(true);
     setStreamlabsMessage(t("กำลังเชื่อมต่อ backend และเริ่ม Streamlabs login...", "Connecting to the backend and starting Streamlabs login..."));
     try {
-      const { data } = await api.get("/auth/streamlabs", { timeout: 120_000 });
+      const data = await prepareStreamlabsLogin();
       if (data.configured && data.url) {
         window.location.href = data.url;
         return;

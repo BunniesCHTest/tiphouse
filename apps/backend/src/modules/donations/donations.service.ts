@@ -214,9 +214,8 @@ export class DonationsService {
 
   async dashboard(userId: string) {
     await this.ensureApproved(userId);
-    const [page, overlay, donations, totals] = await Promise.all([
+    const [page, donations, totals] = await Promise.all([
       this.prisma.donationPage.findUnique({ where: { userId } }),
-      this.prisma.overlaySetting.findUnique({ where: { userId } }),
       this.prisma.donation.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50 }),
       this.prisma.donation.aggregate({
         where: { userId, paymentStatus: DonationStatus.PAID },
@@ -224,8 +223,16 @@ export class DonationsService {
         _count: true,
       }),
     ]);
-    const streamlabsTips = await this.streamlabsTips(overlay?.theme).catch(() => []);
-    return { page, donations, streamlabsTips, revenue: totals._sum.amount ?? 0, donationCount: totals._count };
+    return { page, donations, streamlabsTips: [], revenue: totals._sum.amount ?? 0, donationCount: totals._count };
+  }
+
+  async dashboardStreamlabsTips(userId: string) {
+    await this.ensureApproved(userId);
+    const overlay = await this.prisma.overlaySetting.findUnique({
+      where: { userId },
+      select: { theme: true },
+    });
+    return this.streamlabsTips(overlay?.theme).catch(() => []);
   }
 
   async updatePage(userId: string, dto: UpdateDonationPageDto) {
