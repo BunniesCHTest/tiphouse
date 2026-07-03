@@ -246,7 +246,7 @@ export default function BankSettingsPage() {
                   ...account,
                   slipOkBranchId: event.target.value.replace(/\D/g, "").slice(0, 20),
                 })}
-                placeholder="ตัวอย่าง 70356"
+                placeholder="ตัวอย่าง 12345"
                 required
               />
             </label>
