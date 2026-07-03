@@ -115,6 +115,7 @@ select.input option {
 
 .phone-frame {
   width: 100%;
+  min-width: 0;
   max-width: 430px;
   border-radius: 36px;
   background: var(--app-frame);
@@ -123,6 +124,7 @@ select.input option {
 }
 
 .phone-screen {
+  min-width: 0;
   overflow: hidden;
   border-radius: 28px;
   border: 1px solid var(--app-border);
@@ -130,10 +132,31 @@ select.input option {
 }
 
 .draft-panel {
+  min-width: 0;
   border: 1px solid var(--app-border);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.045);
   padding: 1rem;
+}
+
+@media (max-width: 479px) {
+  .phone-frame {
+    max-width: 100%;
+    border-radius: 24px;
+    padding: 8px;
+  }
+
+  .phone-screen {
+    border-radius: 18px;
+  }
+
+  .phone-screen.p-5 {
+    padding: 0.875rem;
+  }
+
+  .draft-panel {
+    padding: 0.875rem;
+  }
 }
 
 .draft-step {

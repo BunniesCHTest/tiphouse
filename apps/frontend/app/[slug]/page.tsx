@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, use, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAppPreferences } from "@/lib/app-preferences";
 
@@ -24,6 +25,9 @@ type QrState = {
   qrDataUrl: string;
   qrDisplayName: string;
   transactionRef: string;
+  amount: number;
+  createdAt: string;
+  expiresAt: string;
 };
 
 type DonorRank = {
@@ -33,7 +37,7 @@ type DonorRank = {
   anonymous: boolean;
 };
 
-type DonateStep = "form" | "summary" | "qr" | "success";
+type DonateStep = "form" | "summary" | "qr" | "verifying" | "success";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const rankMedals = ["🥇", "🥈", "🥉"];
@@ -59,10 +63,6 @@ function externalUrl(value?: string) {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
 
-function triggerOverlay(payload: { donorName: string; amount: number; message: string; anonymous?: boolean }) {
-  localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({ ...payload, nonce: Date.now() }));
-}
-
 function cookieValue(name: string) {
   if (typeof document === "undefined") return "";
   return document.cookie.split("; ").find((row) => row.startsWith(`${name}=`))?.split("=")[1] ?? "";
@@ -76,10 +76,16 @@ function hasBlockedWord(value: string) {
 
 export default function DonatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const searchParams = useSearchParams();
   const { language, t, toggleLanguage } = useAppPreferences();
   const [page, setPage] = useState<PageData | null>(null);
   const [qr, setQr] = useState<QrState | null>(null);
   const [error, setError] = useState("");
+  const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(600);
+  const [expiredModal, setExpiredModal] = useState(false);
   const [step, setStep] = useState<DonateStep>("form");
   const [formState, setFormState] = useState({ donorName: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
@@ -101,6 +107,23 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     });
     api.get(`/donations/rank/${slug}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
   }, [slug]);
+
+  useEffect(() => {
+    if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) return;
+    if (searchParams.get("preview") === "verifying") setStep("verifying");
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (step !== "qr" || !qr) return;
+    const tick = () => {
+      const seconds = Math.max(0, Math.ceil((new Date(qr.expiresAt).getTime() - Date.now()) / 1000));
+      setRemainingSeconds(seconds);
+      if (seconds === 0) setExpiredModal(true);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [qr, step]);
 
   const amountNumber = Number(formState.amount || 0);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
@@ -137,32 +160,33 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         anonymous,
         provider: "PROMPTPAY",
       });
+      if (Number(data.amount) !== amountNumber || !data.transactionRef) {
+        throw new Error("Donation transaction does not match the requested amount");
+      }
       setQr({
         qrDataUrl: data.qrDataUrl,
         qrDisplayName: data.qrDisplayName ?? page.donationAccountName ?? "TipHouse Donate",
         transactionRef: data.transactionRef,
+        amount: Number(data.amount),
+        createdAt: data.createdAt,
+        expiresAt: data.expiresAt,
       });
+      setRemainingSeconds(Math.max(0, Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / 1000)));
+      setSlipFile(null);
       setError("");
+      setPaymentStatusMessage("");
       setStep("qr");
-    } catch {
-      if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) {
-        setError("ไม่สามารถสร้าง QR ได้ กรุณาลองใหม่อีกครั้ง");
-        return;
-      }
-      const transactionRef = `LOCAL-${Date.now()}`;
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240"><rect width="240" height="240" fill="white"/><text x="120" y="110" text-anchor="middle" font-family="Arial" font-size="18" fill="#071012">TipHouse QR</text><text x="120" y="140" text-anchor="middle" font-family="Arial" font-size="14" fill="#071012">${page.donationAccountName ?? "TipHouse Donate"}</text><text x="120" y="165" text-anchor="middle" font-family="Arial" font-size="14" fill="#071012">THB ${amountNumber}</text></svg>`;
-      setQr({
-        qrDataUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-        qrDisplayName: page.donationAccountName ?? "TipHouse Donate",
-        transactionRef,
-      });
-      setError("");
-      setStep("qr");
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      setError(Array.isArray(message) ? message.join(", ") : message ?? "ไม่สามารถสร้าง QR ได้ กรุณาตรวจสอบว่า Creator บันทึก QR รับเงินแล้ว");
     }
   }
 
   function resetFlow() {
     setQr(null);
+    setSlipFile(null);
+    setExpiredModal(false);
+    setPaymentStatusMessage("");
     setStep("form");
   }
 
@@ -174,15 +198,40 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     }));
   }
 
-  function completePaymentCheck() {
-    triggerOverlay({
-      donorName: formState.anonymous ? THAI_ANONYMOUS : formState.donorName,
-      amount: amountNumber,
-      message: formState.message || "Thank you!",
-      anonymous: formState.anonymous,
-    });
-    setStep("success");
+  async function completePaymentCheck() {
+    if (!qr || !slipFile || checkingPayment || remainingSeconds <= 0) return;
+    setCheckingPayment(true);
+    setPaymentStatusMessage("");
+    setStep("verifying");
+    try {
+      const form = new FormData();
+      form.append("slip", slipFile);
+      const [{ data }] = await Promise.all([
+        api.post(`/payment/slip/${encodeURIComponent(qr.transactionRef)}/verify`, form, {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 60_000,
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, 900)),
+      ]);
+      if (data.status !== "PAID") throw new Error("Payment was not confirmed");
+      setStep("success");
+    } catch (cause) {
+      const status = (cause as { response?: { status?: number } })?.response?.status;
+      const message = (cause as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      if (status === 410) {
+        setExpiredModal(true);
+      } else {
+        setPaymentStatusMessage(Array.isArray(message)
+          ? message.join(", ")
+          : message ?? t("ตรวจสอบสลิปไม่สำเร็จ กรุณาตรวจสอบรูปแล้วลองอีกครั้ง", "Slip verification failed. Check the image and try again."));
+      }
+      setStep("qr");
+    } finally {
+      setCheckingPayment(false);
+    }
   }
+
+  const countdown = `${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
 
   function downloadQr() {
     if (!qr) return;
@@ -246,15 +295,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         TH/ENG
       </button>
       <section
-        className="grid min-h-[45vh] content-end bg-cover bg-center p-6"
+        className="grid min-h-[clamp(170px,24vh,260px)] content-end bg-cover bg-center p-4 sm:p-6"
         style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.bannerUrl ?? defaultPage.bannerUrl})` }}
       >
-        <div className="media-on-dark mx-auto flex w-[min(1100px,100%)] items-end gap-4">
-          <div className="grid size-20 place-items-center overflow-hidden rounded-2xl border-2 border-white/70 bg-mint text-2xl font-black text-ink">
+        <div className="media-on-dark mx-auto flex w-[min(1100px,100%)] items-end gap-3 sm:gap-4">
+          <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-white/70 bg-mint text-xl font-black text-ink sm:size-20 sm:text-2xl">
             {page.avatarUrl ? <img alt="" src={page.avatarUrl} className="size-full object-cover" /> : "TH"}
           </div>
           <div>
-            <h1 className="mt-2 text-5xl font-black md:text-7xl">{page.displayName}</h1>
+            <h1 className="mt-2 break-words text-3xl font-black sm:text-5xl md:text-6xl">{page.displayName}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               {page.theme?.quicklinkUrl && (
                 <a className="text-base font-bold text-mint underline decoration-mint/50 underline-offset-4 hover:text-sky" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
@@ -265,7 +314,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           </div>
         </div>
       </section>
-      <section className="mx-auto grid w-[min(1180px,calc(100%-2rem))] gap-6 py-8 lg:grid-cols-[430px_1fr]">
+      <section className="mx-auto grid w-[min(1180px,calc(100%-1.5rem))] min-w-0 gap-5 py-6 sm:w-[min(1180px,calc(100%-2rem))] sm:gap-6 sm:py-8 md:grid-cols-[minmax(340px,430px)_minmax(0,1fr)]">
         {step === "form" && (
           <div className="phone-frame">
             <form onSubmit={continueToSummary} className="phone-screen grid gap-4 p-5">
@@ -368,14 +417,17 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             <aside className="phone-screen grid gap-4 p-5 text-center">
               <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-left text-ink">
                 <h2 className="text-3xl font-black">ชำระเงินด้วย QR</h2>
-                <p className="mt-3 font-semibold opacity-80">หลังชำระเงิน กดตรวจสอบสถานะเพื่อให้ระบบยืนยันรายการ</p>
+                <p className="mt-3 font-semibold opacity-80">หลังชำระเงิน แนบสลิปเพื่อให้ระบบตรวจสอบก่อนส่ง Alert</p>
               </div>
               <section className="draft-panel">
                 <p className="font-black">ยอดชำระ</p>
-                <strong className="mt-1 block text-4xl font-black text-mint">฿{amountNumber.toLocaleString("th-TH")}</strong>
+                <strong className="mt-1 block text-4xl font-black text-mint">฿{qr.amount.toLocaleString("th-TH")}</strong>
+                <div className={`mx-auto mt-3 w-fit rounded-lg border px-4 py-2 font-black ${remainingSeconds <= 60 ? "border-coral/60 bg-coral/10 text-coral" : "border-sky/30 bg-sky/10 text-sky"}`}>
+                  QR หมดอายุใน {countdown}
+                </div>
                 <img alt="PromptPay QR" src={qr.qrDataUrl} className="mx-auto mt-4 size-64 rounded-2xl bg-white p-3" />
                 <button className="btn mt-4 w-full" type="button" onClick={downloadQr}>บันทึกภาพ QR เพื่อเปิดในแอปธนาคาร</button>
-                <p className="mt-3 text-sm text-white/55">กรุณาชำระภายใน 10:00 นาที อยู่ที่ขั้นตอนหน้าจอก่อนระบบตรวจสอบสำเร็จ</p>
+                <p className="mt-3 text-sm text-white/55">{t("QR นี้ผูกกับยอดและเลขรายการด้านล่าง กรุณาตรวจสอบยอดในแอปธนาคารก่อนยืนยัน", "This QR is tied to the amount and reference below. Check the amount in your banking app before confirming.")}</p>
               </section>
               <section className="draft-panel text-left">
                 <h3 className="font-black">วิธีชำระเงิน</h3>
@@ -388,12 +440,60 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   ))}
                 </div>
               </section>
-              <p className="text-xs text-white/40">Ref: {qr.transactionRef}</p>
+              <section className="draft-panel grid gap-3 text-left">
+                <label className="font-black">
+                  แนบสลิปหลังชำระเงิน
+                  <input
+                    className="input mt-2"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        setPaymentStatusMessage("รูปสลิปต้องมีขนาดไม่เกิน 5MB");
+                        setSlipFile(null);
+                        return;
+                      }
+                      setPaymentStatusMessage("");
+                      setSlipFile(file);
+                    }}
+                  />
+                </label>
+                <p className="text-sm text-white/55">รองรับ PNG, JPG และ WEBP ขนาดไม่เกิน 5MB</p>
+                {slipFile && <p className="truncate font-bold text-mint">เลือกแล้ว: {slipFile.name}</p>}
+              </section>
+              <p className="break-all text-xs text-white/55">Ref: {qr.transactionRef}</p>
+              {paymentStatusMessage && <p className="rounded-xl border border-sky/30 bg-sky/10 p-3 text-sm text-white/80">{paymentStatusMessage}</p>}
               <div className="grid gap-3">
-                <button className="btn btn-primary" type="button" onClick={completePaymentCheck}>ตรวจสอบสถานะ</button>
+                <button className="btn btn-primary disabled:cursor-wait disabled:opacity-40" type="button" onClick={completePaymentCheck} disabled={!slipFile || checkingPayment || remainingSeconds <= 0}>
+                  {checkingPayment ? t("กำลังตรวจสอบ...", "Checking...") : t("ตรวจสอบสลิป", "Verify Slip")}
+                </button>
                 <button className="btn" type="button" onClick={resetFlow}>ยกเลิก QR code</button>
               </div>
             </aside>
+          </div>
+        )}
+
+        {step === "verifying" && (
+          <div className="phone-frame">
+            <section className="phone-screen grid min-h-[620px] content-center justify-items-center gap-5 p-6 text-center">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-sky">Secure payment verification</p>
+              <h2 className="text-3xl font-black">กำลังตรวจสอบ</h2>
+              <div className="relative grid size-40 place-items-center rounded-full border-2 border-sky/25">
+                <div className="absolute inset-[-2px] animate-spin rounded-full border-4 border-transparent border-t-mint border-r-sky" />
+                <div className="grid size-24 place-items-center rounded-full bg-sky/10 text-sm font-black text-sky">SLIP<br />CHECK</div>
+              </div>
+              <div>
+                <p className="font-black">กำลังตรวจสอบการชำระเงิน</p>
+                <p className="mt-2 text-white/55">กรุณารอสักครู่...</p>
+              </div>
+              <div className="flex gap-2" aria-hidden="true">
+                {[0, 1, 2, 3].map((index) => (
+                  <span key={index} className="size-2 animate-pulse rounded-full bg-sky" style={{ animationDelay: `${index * 160}ms` }} />
+                ))}
+              </div>
+              <p className="text-xs text-white/45">ห้ามปิดหน้านี้จนกว่าจะตรวจสอบเสร็จสิ้น</p>
+            </section>
           </div>
         )}
 
@@ -455,6 +555,16 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           </div>
         </aside>
       </section>
+      {expiredModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4">
+          <section className="card w-[min(420px,100%)] p-6 text-center" role="alertdialog" aria-modal="true" aria-labelledby="qr-expired-title">
+            <p className="font-black text-coral">EXPIRED</p>
+            <h2 id="qr-expired-title" className="mt-2 text-3xl font-black">QR Code หมดอายุ</h2>
+            <p className="mt-3 text-white/60">รายการนี้เกินเวลา 10 นาที กรุณาสร้างรายการโดเนทใหม่</p>
+            <button className="btn btn-primary mt-6 w-full" type="button" onClick={resetFlow}>ปิด</button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

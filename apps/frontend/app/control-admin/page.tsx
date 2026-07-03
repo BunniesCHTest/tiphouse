@@ -17,18 +17,11 @@ type UserRow = {
   authProvider?: string;
   streamlabsUsername?: string | null;
   payout?: {
-    accountName?: string | null;
-    legalName?: string | null;
     phone?: string | null;
     contactEmail?: string | null;
-    taxId?: string | null;
-    address?: string | null;
-    bankName?: string | null;
-    branchName?: string | null;
-    accountType?: string | null;
-    accountNumber?: string | null;
-    payoutMethod?: string | null;
-    kycStatus?: string | null;
+    receivingQrImageUrl?: string | null;
+    slipOkBranchId?: string | null;
+    slipOkConfigured?: boolean;
   } | null;
   page?: { slug: string; displayName: string; handle?: string | null; minAmount?: number; goalAmount?: number } | null;
   _count?: { donations: number; approvals: number };
@@ -44,7 +37,7 @@ type DonationRow = {
   transactionRef?: string | null;
   createdAt: string;
   paidAt?: string | null;
-  source?: "tiphouse" | "import";
+  source?: "tiphouse" | "import" | "streamlabs";
   user?: { id: string; username: string; email: string };
   page?: { slug: string; displayName: string };
 };
@@ -469,8 +462,10 @@ export default function AdminPage() {
   }
 
   async function replayAlert(row: DonationRow) {
-    await api.post(`/admin/transactions/${row.id}/replay-alert`, {}, { headers: authHeaders("admin") });
-    setMessage(`ส่ง Alert ซ้ำแล้ว: ${row.transactionRef ?? row.id}`);
+    const { data } = await api.post(`/admin/transactions/${row.id}/replay-alert`, {}, { headers: authHeaders("admin") });
+    if (!data?.ok) throw new Error(data?.reason ?? data?.message ?? "Alert delivery failed");
+    const provider = data.provider === "streamlabs" ? "Streamlabs" : "TipHouse";
+    setMessage(`ส่ง Alert ซ้ำผ่าน ${provider} แล้ว: ${row.transactionRef ?? row.id}`);
   }
 
   async function deleteTransaction(row: DonationRow) {
@@ -677,9 +672,9 @@ export default function AdminPage() {
                       <span className="block text-xs text-white/45">{row.donorName}{row.message ? ` / ${row.message}` : ""}</span>
                     </td>
                     <td>
-                      {row.transactionRef ? (
+                      {row.transactionRef && row.source !== "streamlabs" ? (
                         <a className="font-bold text-mint underline" href={`/receipt/${encodeURIComponent(row.transactionRef)}`} target="_blank">{row.transactionRef}</a>
-                      ) : "-"}
+                      ) : row.transactionRef ?? "-"}
                     </td>
                     <td>฿{row.amount.toLocaleString()}</td>
                     <td>
@@ -687,7 +682,7 @@ export default function AdminPage() {
                         ? <span className="text-white/40">-</span>
                         : <button className="btn h-9 min-h-9 px-3 text-xs" type="button" onClick={() => replayAlert(row)}>Alert ซ้ำ</button>}
                     </td>
-                    <td><button className="btn h-9 min-h-9 border-coral/50 px-3 text-xs text-coral" type="button" onClick={() => deleteTransaction(row)}>Delete</button></td>
+                    <td>{row.source === "streamlabs" ? <span className="text-white/40">-</span> : <button className="btn h-9 min-h-9 border-coral/50 px-3 text-xs text-coral" type="button" onClick={() => deleteTransaction(row)}>Delete</button>}</td>
                   </tr>
                 ))}
                 {!pagedTransactions.length && (
@@ -833,27 +828,27 @@ export default function AdminPage() {
               <div className="draft-panel">
                 <h3 className="text-xl font-black">ข้อมูลบัญชีโอนจ่าย</h3>
                 {selectedUser.payout ? (
-                  <dl className="mt-4 grid gap-3 md:grid-cols-2">
-                    {[
-                      ["ชื่อบัญชี", selectedUser.payout.accountName],
-                      ["ชื่อนิติ/ชื่อจริง", selectedUser.payout.legalName],
-                      ["เบอร์โทร", selectedUser.payout.phone],
-                      ["อีเมลติดต่อ", selectedUser.payout.contactEmail],
-                      ["เลขผู้เสียภาษี/บัตรประชาชน", selectedUser.payout.taxId],
-                      ["ธนาคาร", selectedUser.payout.bankName],
-                      ["สาขา", selectedUser.payout.branchName],
-                      ["ประเภทบัญชี", selectedUser.payout.accountType],
-                      ["เลขบัญชี", selectedUser.payout.accountNumber],
-                      ["วิธีโอนจ่าย", selectedUser.payout.payoutMethod],
-                      ["สถานะ KYC", selectedUser.payout.kycStatus],
-                      ["ที่อยู่", selectedUser.payout.address],
-                    ].map(([label, value]) => (
+                  <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <p className="text-sm text-white/55">QR Code รับเงิน</p>
+                      {selectedUser.payout.receivingQrImageUrl
+                        ? <img className="mt-3 aspect-square w-full rounded-lg bg-white object-contain p-2" src={selectedUser.payout.receivingQrImageUrl} alt="Receiving QR" />
+                        : <p className="mt-2 font-bold">-</p>}
+                    </div>
+                    <dl className="grid content-start gap-3">
+                      {[
+                        ["เบอร์โทรศัพท์", selectedUser.payout.phone],
+                        ["อีเมลติดต่อ", selectedUser.payout.contactEmail],
+                        ["SlipOK Branch ID", selectedUser.payout.slipOkBranchId],
+                        ["SlipOK", selectedUser.payout.slipOkConfigured ? "Connected" : "Not configured"],
+                      ].map(([label, value]) => (
                       <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-3">
                         <dt className="text-sm text-white/55">{label}</dt>
                         <dd className="mt-1 font-bold">{value || "-"}</dd>
                       </div>
-                    ))}
-                  </dl>
+                      ))}
+                    </dl>
+                  </div>
                 ) : <p className="mt-3 text-white/55">ยังไม่มีข้อมูลบัญชีโอนจ่ายของ User นี้</p>}
               </div>
             </section>

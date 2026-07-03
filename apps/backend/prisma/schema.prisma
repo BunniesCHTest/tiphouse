@@ -36,6 +36,7 @@ enum DonationStatus {
   FAILED
   REFUNDED
   REVIEW
+  EXPIRED
 }
 
 enum PaymentProvider {
@@ -127,6 +128,10 @@ model Donation {
   paymentProvider PaymentProvider
   transactionRef  String?         @unique
   qrPayload       String?
+  expiresAt       DateTime?
+  verifiedAt      DateTime?
+  slipTransactionRef String?      @unique
+  slipVerification Json?
   paidAt          DateTime?
   ipAddress       String?
   userAgent       String?
@@ -155,19 +160,23 @@ model OverlaySetting {
 model PayoutAccount {
   id            String   @id @default(uuid())
   userId        String   @unique
-  accountName   String
+  accountName   String?
   legalName     String?
   phone         String?
   contactEmail  String?
   taxId         String?
   address       String?
-  bankName      String
+  bankName      String?
   branchName    String?
   accountType   String?
-  accountNumber String
+  accountNumber String?
   payoutMethod  String   @default("BANK_TRANSFER")
   promptpayType String?
   promptpayId   String?
+  receivingQrImageUrl String?
+  receivingQrPayload String?
+  slipOkBranchId String?
+  slipOkApiKeyEncrypted String?
   note          String?
   kycStatus     String   @default("PENDING")
   createdAt     DateTime @default(now())

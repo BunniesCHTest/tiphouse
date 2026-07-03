@@ -1,8 +1,10 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, GoneException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash } from "crypto";
+import { decryptSecret } from "../../common/secret-box";
 import { DonationsService } from "../donations/donations.service";
-import { OverlayService } from "../overlay/overlay.service";
+import { thaiQrRecipientValues } from "../donations/thai-qr";
+import { AlertDeliveryService } from "../overlay/alert-delivery.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
 interface GatewayPayload {
@@ -16,13 +18,42 @@ interface GatewayPayload {
   status?: string;
 }
 
+type SlipFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
+
+type SlipOkResult = {
+  success?: boolean;
+  code?: number;
+  message?: string;
+  data?: {
+    success?: boolean;
+    message?: string;
+    transRef?: string;
+    transTimestamp?: string;
+    amount?: number;
+    receivingBank?: string;
+    sendingBank?: string;
+    toMerchantId?: string | null;
+    receiver?: {
+      displayName?: string;
+      name?: string;
+      proxy?: { value?: string | null };
+      account?: { value?: string | null };
+    };
+  };
+};
+
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly donations: DonationsService,
-    private readonly overlay: OverlayService,
+    private readonly alertDelivery: AlertDeliveryService,
   ) {}
 
   async handleOmiseWebhook(payload: unknown, signature?: string) {
@@ -45,81 +76,181 @@ export class PaymentsService {
     return this.finalizePaidDonation(data.transactionRef);
   }
 
+  async verifySlip(transactionRef: string, slip?: SlipFile) {
+    if (!slip) throw new BadRequestException("กรุณาแนบรูปสลิปการโอนเงิน");
+    const donation = await this.prisma.donation.findUnique({
+      where: { transactionRef },
+      include: { user: { include: { payout: true, overlay: true } } },
+    });
+    if (!donation) throw new BadRequestException("ไม่พบรายการโดเนท");
+    if (donation.paymentStatus === "PAID") {
+      return { ok: true, status: "PAID", alreadyProcessed: true, transactionRef };
+    }
+    const expiresAt = donation.expiresAt ?? new Date(donation.createdAt.getTime() + 10 * 60 * 1000);
+    if (Date.now() >= expiresAt.getTime()) {
+      await this.prisma.donation.updateMany({
+        where: { id: donation.id, paymentStatus: "PENDING" },
+        data: { paymentStatus: "EXPIRED" },
+      });
+      throw new GoneException("QR Code หมดอายุแล้ว กรุณาสร้างรายการใหม่");
+    }
+    if (!donation.qrPayload || !donation.user.payout?.receivingQrPayload) {
+      throw new BadRequestException("รายการนี้ไม่มีข้อมูล QR สำหรับตรวจสอบผู้รับ");
+    }
+
+    const result = await this.checkSlipOk(slip, donation.amount, donation.user.payout);
+    const data = result.data;
+    if (!result.success || !data?.success || !data.transRef) {
+      throw new BadRequestException(result.message ?? data?.message ?? "ตรวจสอบสลิปไม่สำเร็จ");
+    }
+    if (Math.abs(Number(data.amount) - donation.amount) > 0.001) {
+      throw new BadRequestException("ยอดเงินในสลิปไม่ตรงกับยอดโดเนท");
+    }
+    if (!this.receiverMatchesQr(donation.qrPayload, data)) {
+      throw new BadRequestException("บัญชีผู้รับในสลิปไม่ตรงกับ QR Code ของ Creator");
+    }
+
+    const duplicate = await this.prisma.donation.findFirst({
+      where: { slipTransactionRef: data.transRef, id: { not: donation.id } },
+      select: { id: true },
+    });
+    if (duplicate) throw new ConflictException("สลิปนี้ถูกใช้ยืนยันรายการอื่นแล้ว");
+
+    const verification = {
+      provider: "SLIPOK",
+      transRef: data.transRef,
+      transTimestamp: data.transTimestamp ?? null,
+      amount: Number(data.amount),
+      receivingBank: data.receivingBank ?? null,
+      sendingBank: data.sendingBank ?? null,
+      receiver: {
+        displayName: data.receiver?.displayName ?? null,
+        name: data.receiver?.name ?? null,
+        proxy: data.receiver?.proxy?.value ?? null,
+        account: data.receiver?.account?.value ?? null,
+        merchantId: data.toMerchantId ?? null,
+      },
+    };
+
+    try {
+      await this.prisma.donation.update({
+        where: { id: donation.id },
+        data: {
+          slipTransactionRef: data.transRef,
+          slipVerification: verification,
+          verifiedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2002") {
+        throw new ConflictException("สลิปนี้ถูกใช้ยืนยันรายการอื่นแล้ว");
+      }
+      throw error;
+    }
+
+    const finalized = await this.finalizePaidDonation(transactionRef);
+    return { ...finalized, status: "PAID", transactionRef };
+  }
+
+  private async checkSlipOk(
+    slip: SlipFile,
+    amount: number,
+    payout: { slipOkBranchId?: string | null; slipOkApiKeyEncrypted?: string | null } | null,
+  ): Promise<SlipOkResult> {
+    const mockMode = this.config.get<string>("SLIPOK_MOCK_MODE") === "true"
+      && this.config.get<string>("NODE_ENV") !== "production";
+    if (mockMode) {
+      return {
+        success: true,
+        data: {
+          success: true,
+          message: "LOCAL MOCK",
+          transRef: `MOCK-${createHash("sha256").update(slip.buffer).digest("hex").slice(0, 24)}`,
+          transTimestamp: new Date().toISOString(),
+          amount,
+          toMerchantId: "TIPHOUSE-MOCK",
+        },
+      };
+    }
+
+    const branchId = payout?.slipOkBranchId?.trim();
+    const encryptedApiKey = payout?.slipOkApiKeyEncrypted?.trim();
+    if (!branchId || !encryptedApiKey) {
+      throw new ServiceUnavailableException("ระบบตรวจสลิปยังไม่ได้ตั้งค่า SlipOK");
+    }
+    const apiKey = decryptSecret(encryptedApiKey, this.credentialEncryptionKey());
+    const form = new FormData();
+    const slipBytes = new Uint8Array(slip.buffer.byteLength);
+    slipBytes.set(slip.buffer);
+    form.append("files", new Blob([slipBytes], { type: slip.mimetype }), slip.originalname || "slip.jpg");
+    // Each creator owns a SlipOK branch, so SlipOK can also enforce receiver
+    // matching and duplicate-slip protection for that creator.
+    form.append("log", "true");
+    form.append("amount", String(amount));
+    const response = await fetch(`https://api.slipok.com/api/line/apikey/${encodeURIComponent(branchId)}`, {
+      method: "POST",
+      headers: { "x-authorization": apiKey },
+      body: form,
+    });
+    const body = await response.json().catch(() => ({})) as SlipOkResult;
+    if (!response.ok) {
+      throw new BadRequestException(body.message ?? `SlipOK returned HTTP ${response.status}`);
+    }
+    return body;
+  }
+
+  private credentialEncryptionKey() {
+    const configured = this.config.get<string>("CREDENTIAL_ENCRYPTION_KEY")?.trim();
+    if (configured) return configured;
+    const developmentFallback = this.config.get<string>("NODE_ENV") !== "production"
+      ? this.config.get<string>("JWT_ACCESS_SECRET")?.trim()
+      : undefined;
+    if (developmentFallback) return developmentFallback;
+    throw new ServiceUnavailableException("ระบบยังไม่ได้ตั้งค่า CREDENTIAL_ENCRYPTION_KEY");
+  }
+
+  private receiverMatchesQr(qrPayload: string, slip: NonNullable<SlipOkResult["data"]>) {
+    if (this.config.get<string>("SLIPOK_MOCK_MODE") === "true"
+      && this.config.get<string>("NODE_ENV") !== "production") return true;
+    const expected = thaiQrRecipientValues(qrPayload);
+    const actual = [
+      slip.toMerchantId,
+      slip.receiver?.proxy?.value,
+      slip.receiver?.account?.value,
+    ].filter((value): value is string => Boolean(value));
+    return expected.some((candidate) => actual.some((masked) => this.maskedIdentifierMatches(candidate, masked)));
+  }
+
+  private maskedIdentifierMatches(expectedValue: string, maskedValue: string) {
+    const expectedRaw = expectedValue.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const expectedVariants = new Set([expectedRaw]);
+    if (expectedRaw.startsWith("0066")) expectedVariants.add(`0${expectedRaw.slice(4)}`);
+    const visibleChunks = maskedValue
+      .toUpperCase()
+      .split(/[X*•\-_\s]+/)
+      .map((value) => value.replace(/[^A-Z0-9]/g, ""))
+      .filter((value) => value.length >= 3);
+    if (!visibleChunks.length) return false;
+    return [...expectedVariants].some((expected) => visibleChunks.every((chunk) => expected.includes(chunk)));
+  }
+
   private async finalizePaidDonation(transactionRef: string) {
     const donation = await this.donations.markPaid(transactionRef);
-    const sentToStreamlabs = await this.forwardDonationToStreamlabs(donation);
+    if (donation.alreadyProcessed) {
+      return { ok: true, donationId: donation.id, alreadyProcessed: true };
+    }
     const streamerKey = donation.user.overlay?.streamerKey;
-    if (!sentToStreamlabs && streamerKey) {
-      this.overlay.emitPaidDonation(streamerKey, {
+    const delivery = donation.user.overlay && streamerKey
+      ? await this.alertDelivery.deliver(donation.user.overlay, {
         donationId: donation.id,
         donorName: donation.anonymous ? "Anonymous" : donation.donorName,
         amount: donation.amount,
         message: donation.message,
         anonymous: donation.anonymous,
         createdAt: donation.paidAt?.toISOString() ?? new Date().toISOString(),
-        settings: donation.user.overlay
-          ? {
-              theme: donation.user.overlay.theme,
-              animation: donation.user.overlay.animation,
-              soundUrl: donation.user.overlay.soundUrl,
-              ttsEnabled: donation.user.overlay.ttsEnabled,
-            }
-          : undefined,
-      });
-    }
-    return { ok: true, donationId: donation.id };
-  }
-
-  private async forwardDonationToStreamlabs(donation: Awaited<ReturnType<DonationsService["markPaid"]>>) {
-    const streamlabs = (donation.user.overlay?.theme as any)?.streamlabs;
-    if (!streamlabs?.connected || !streamlabs?.alertBoxEnabled || !streamlabs?.accessToken) return false;
-    const donorName = donation.anonymous ? "Anonymous" : donation.donorName;
-    try {
-      const response = await fetch("https://streamlabs.com/api/v2.0/donations", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${streamlabs.accessToken}`,
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        body: JSON.stringify({
-          name: donorName.slice(0, 25).padEnd(2, "_"),
-          identifier: this.donorIdentifier(donation.id, donorName),
-          amount: donation.amount,
-          currency: "THB",
-          message: donation.message.slice(0, 254),
-          created_at: (donation.paidAt ?? new Date()).toISOString(),
-          skip_alert: "no",
-        }),
-      });
-      await this.prisma.webhookLog.create({
-        data: {
-          provider: "STREAMLABS",
-          eventType: "donations.create",
-          signatureOk: response.ok,
-          payload: {
-            donationId: donation.id,
-            status: response.status,
-            ok: response.ok,
-          },
-        },
-      });
-      return response.ok;
-    } catch (error) {
-      await this.prisma.webhookLog.create({
-        data: {
-          provider: "STREAMLABS",
-          eventType: "donations.create",
-          signatureOk: false,
-          payload: { donationId: donation.id, error: error instanceof Error ? error.message : "unknown" },
-        },
-      });
-      return false;
-    }
-  }
-
-  private donorIdentifier(donationId: string, donorName: string) {
-    return createHash("sha256").update(`${donationId}:${donorName}`).digest("hex");
+      })
+      : { ok: false, provider: "none", reason: "Creator has no overlay configuration" };
+    return { ok: true, donationId: donation.id, alert: delivery };
   }
 
   private verifyWebhookSignature(provider: string, payload: unknown, signature?: string, secret?: string) {

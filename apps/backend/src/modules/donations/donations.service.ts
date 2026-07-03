@@ -1,8 +1,10 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DonationStatus, Prisma } from "@prisma/client";
-import QRCode from "qrcode";
+import { randomBytes } from "crypto";
+import * as QRCode from "qrcode";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateDonationDto, UpdateDonationPageDto } from "./dto";
+import { createFixedAmountThaiQr } from "./thai-qr";
 
 @Injectable()
 export class DonationsService {
@@ -115,15 +117,27 @@ export class DonationsService {
   }
 
   async createPending(dto: CreateDonationDto, meta: { ipAddress?: string; userAgent?: string }) {
-    const page = await this.prisma.donationPage.findUnique({ where: { slug: dto.pageSlug }, include: { user: true } });
+    const page = await this.prisma.donationPage.findUnique({
+      where: { slug: dto.pageSlug },
+      include: { user: { include: { payout: true } } },
+    });
     if (!page) throw new NotFoundException("Donation page not found");
     if (page.user.accountStatus !== "APPROVED") throw new BadRequestException("Creator account is waiting for admin approval");
     if (dto.amount < page.minAmount) throw new BadRequestException(`Minimum donation is ${page.minAmount}`);
     if (dto.amount > 20000) throw new BadRequestException("Maximum donation is 20000");
 
-    const transactionRef = `TH-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    const qrPayload = `TIPHOUSE|${page.donationAccountName}|${dto.amount}|${transactionRef}`;
-    const qrDataUrl = await QRCode.toDataURL(qrPayload);
+    const receivingQrPayload = page.user.payout?.receivingQrPayload;
+    if (!receivingQrPayload) {
+      throw new BadRequestException("Creator has not configured a receiving QR Code");
+    }
+    const transactionRef = `TH${randomBytes(8).toString("hex").toUpperCase()}`;
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const qrPayload = createFixedAmountThaiQr(receivingQrPayload, dto.amount, transactionRef);
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 360,
+    });
 
     const donation = await this.prisma.donation.create({
       data: {
@@ -136,6 +150,7 @@ export class DonationsService {
         paymentProvider: dto.provider,
         transactionRef,
         qrPayload,
+        expiresAt,
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       },
@@ -148,15 +163,53 @@ export class DonationsService {
       qrPayload,
       qrDataUrl,
       qrDisplayName: page.donationAccountName,
+      amount: donation.amount,
+      createdAt: donation.createdAt,
+      expiresAt,
+    };
+  }
+
+  async paymentStatus(transactionRef: string) {
+    const donation = await this.prisma.donation.findUnique({
+      where: { transactionRef },
+      select: {
+        transactionRef: true,
+        amount: true,
+        paymentStatus: true,
+        createdAt: true,
+        expiresAt: true,
+        paidAt: true,
+      },
+    });
+    if (!donation) throw new NotFoundException("Donation transaction not found");
+    const expiresAt = donation.expiresAt ?? new Date(donation.createdAt.getTime() + 10 * 60 * 1000);
+    const expired = donation.paymentStatus === DonationStatus.PENDING && Date.now() >= expiresAt.getTime();
+    if (expired) {
+      await this.prisma.donation.updateMany({
+        where: { transactionRef, paymentStatus: DonationStatus.PENDING },
+        data: { paymentStatus: DonationStatus.EXPIRED },
+      });
+    }
+    return {
+      transactionRef: donation.transactionRef,
+      amount: donation.amount,
+      status: expired ? DonationStatus.EXPIRED : donation.paymentStatus,
+      createdAt: donation.createdAt,
+      paidAt: donation.paidAt,
+      expiresAt,
     };
   }
 
   async markPaid(transactionRef: string) {
-    return this.prisma.donation.update({
-      where: { transactionRef },
+    const updated = await this.prisma.donation.updateMany({
+      where: { transactionRef, paymentStatus: { not: DonationStatus.PAID } },
       data: { paymentStatus: DonationStatus.PAID, paidAt: new Date() },
+    });
+    const donation = await this.prisma.donation.findUniqueOrThrow({
+      where: { transactionRef },
       include: { user: { include: { overlay: true } } },
     });
+    return { ...donation, alreadyProcessed: updated.count === 0 };
   }
 
   async dashboard(userId: string) {

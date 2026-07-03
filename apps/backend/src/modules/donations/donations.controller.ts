@@ -28,6 +28,11 @@ export class DonationsController {
     return this.donations.receipt(ref);
   }
 
+  @Get("donations/status/:ref")
+  paymentStatus(@Param("ref") ref: string) {
+    return this.donations.paymentStatus(ref);
+  }
+
   @Post("donate")
   create(@Body() dto: CreateDonationDto, @Req() req: any) {
     return this.donations.createPending(dto, {

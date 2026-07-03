@@ -2,57 +2,33 @@ import { IsBoolean, IsEmail, IsObject, IsOptional, IsString, Matches, MaxLength,
 
 export class UpsertPayoutDto {
   @IsString()
-  accountName!: string;
+  @MaxLength(3_000_000)
+  @Matches(/^data:image\/(png|jpeg|jpg|webp);base64,/)
+  receivingQrImageUrl!: string;
 
   @IsString()
-  @IsOptional()
-  legalName?: string;
+  @MaxLength(2_000)
+  receivingQrPayload!: string;
 
   @IsString()
+  @Matches(/^[0-9]{9,10}$/)
   @IsOptional()
   phone?: string;
 
-  @IsString()
+  @IsEmail()
   @IsOptional()
   contactEmail?: string;
 
   @IsString()
+  @Matches(/^[0-9]{1,20}$/)
   @IsOptional()
-  taxId?: string;
+  slipOkBranchId?: string;
 
   @IsString()
+  @MinLength(8)
+  @MaxLength(200)
   @IsOptional()
-  address?: string;
-
-  @IsString()
-  bankName!: string;
-
-  @IsString()
-  @IsOptional()
-  branchName?: string;
-
-  @IsString()
-  @IsOptional()
-  accountType?: string;
-
-  @IsString()
-  accountNumber!: string;
-
-  @IsString()
-  @IsOptional()
-  payoutMethod?: string;
-
-  @IsString()
-  @IsOptional()
-  promptpayType?: string;
-
-  @IsString()
-  @IsOptional()
-  promptpayId?: string;
-
-  @IsString()
-  @IsOptional()
-  note?: string;
+  slipOkApiKey?: string;
 }
 
 export class UpdateOverlayDto {

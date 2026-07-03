@@ -2,6 +2,8 @@ import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import { AdminModule } from "./modules/admin/admin.module";
 import { BootstrapService } from "./bootstrap.service";
@@ -33,6 +35,12 @@ import { PrismaModule } from "./prisma/prisma.module";
     SettingsModule,
     AdminModule,
   ],
-  providers: [BootstrapService],
+  providers: [
+    BootstrapService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

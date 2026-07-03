@@ -10,6 +10,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const { t } = useAppPreferences();
   const [streamlabsMessage, setStreamlabsMessage] = useState("");
+  const [streamlabsLoading, setStreamlabsLoading] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("streamlabs") !== "failed") return;
@@ -26,8 +27,11 @@ function LoginContent() {
   }, [searchParams]);
 
   async function streamlabsLogin() {
+    if (streamlabsLoading) return;
+    setStreamlabsLoading(true);
+    setStreamlabsMessage(t("กำลังเชื่อมต่อ backend และเริ่ม Streamlabs login...", "Connecting to the backend and starting Streamlabs login..."));
     try {
-      const { data } = await api.get("/auth/streamlabs");
+      const { data } = await api.get("/auth/streamlabs", { timeout: 120_000 });
       if (data.configured && data.url) {
         window.location.href = data.url;
         return;
@@ -35,7 +39,9 @@ function LoginContent() {
       const missing = Array.isArray(data.missing) && data.missing.length ? ` ขาด: ${data.missing.join(", ")}` : "";
       setStreamlabsMessage(`ยังไม่ได้ตั้งค่า Streamlabs OAuth ในระบบ production.${missing}`);
     } catch {
-      setStreamlabsMessage("เชื่อมต่อ backend เพื่อเริ่ม Streamlabs login ไม่สำเร็จ");
+      setStreamlabsMessage(t("เชื่อมต่อ backend ไม่สำเร็จ กรุณาตรวจสอบสถานะ backend และฐานข้อมูล", "Could not connect to the backend. Check the backend and database status."));
+    } finally {
+      setStreamlabsLoading(false);
     }
   }
 
@@ -47,7 +53,9 @@ function LoginContent() {
         <h1 className="mt-3 text-5xl font-black">{t("เข้าสู่ระบบด้วย Streamlabs", "Sign in with Streamlabs")}</h1>
         <section className="card mt-8 grid gap-4 p-5">
           <p className="leading-7 text-white/65">{t("TipHouse ใช้ Streamlabs Login สำหรับ Creator เท่านั้น เพื่อเชื่อม Alert Box, Tips และ Variation จากบัญชี Streamlabs ของคุณ", "TipHouse uses Streamlabs Login for creators, connecting your Alert Box, Tips, and variations from your Streamlabs account.")}</p>
-          <button className="btn btn-primary" type="button" onClick={streamlabsLogin}>{t("Login ผ่าน Streamlabs", "Login with Streamlabs")}</button>
+          <button className="btn btn-primary disabled:cursor-wait disabled:opacity-60" type="button" onClick={streamlabsLogin} disabled={streamlabsLoading}>
+            {streamlabsLoading ? t("กำลังเชื่อมต่อ...", "Connecting...") : t("Login ผ่าน Streamlabs", "Login with Streamlabs")}
+          </button>
           {streamlabsMessage && <p className="text-gold">{streamlabsMessage}</p>}
         </section>
       </main>

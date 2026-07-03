@@ -1,9 +1,10 @@
 import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { DonationStatus, PaymentProvider } from "@prisma/client";
 import * as argon2 from "argon2";
+import { randomUUID } from "crypto";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
-import { OverlayService } from "../overlay/overlay.service";
+import { AlertDeliveryService } from "../overlay/alert-delivery.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @UseGuards(JwtAuthGuard)
@@ -11,7 +12,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly overlay: OverlayService,
+    private readonly alertDelivery: AlertDeliveryService,
   ) {}
 
   private requireAdmin(user: JwtUser) {
@@ -117,8 +118,14 @@ export class AdminController {
       include: { page: true, payout: true, overlay: true },
     });
     const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
+    const payout = item.payout ? {
+      ...item.payout,
+      slipOkApiKeyEncrypted: undefined,
+      slipOkConfigured: Boolean(item.payout.slipOkBranchId && item.payout.slipOkApiKeyEncrypted),
+    } : null;
     return {
       ...item,
+      payout,
       authProvider: streamlabs?.connected ? "Streamlabs" : "Email",
       streamlabsUsername: streamlabs?.username ?? null,
     };
@@ -160,7 +167,14 @@ export class AdminController {
     await this.prisma.adminLog.create({
       data: { adminId: admin.sub, action: "UPDATE_USER", targetId: id, metadata: { fields: Object.keys(body) } },
     });
-    return updated;
+    return {
+      ...updated,
+      payout: updated.payout ? {
+        ...updated.payout,
+        slipOkApiKeyEncrypted: undefined,
+        slipOkConfigured: Boolean(updated.payout.slipOkBranchId && updated.payout.slipOkApiKeyEncrypted),
+      } : null,
+    };
   }
 
   @Delete("users/:id")
@@ -190,17 +204,22 @@ export class AdminController {
     @Query("userId") userId?: string,
   ) {
     this.requireStaff(user);
+    const search = q?.trim();
     const rows = await this.prisma.donation.findMany({
       where: {
         userId: userId || undefined,
         paymentStatus: status ? (status as any) : undefined,
-        OR: q
+        OR: search
           ? [
-              { donorName: { contains: q, mode: "insensitive" } },
-              { message: { contains: q, mode: "insensitive" } },
-              { transactionRef: { contains: q, mode: "insensitive" } },
-              { user: { username: { contains: q, mode: "insensitive" } } },
-              { page: { slug: { contains: q, mode: "insensitive" } } },
+              { donorName: { contains: search, mode: "insensitive" } },
+              { message: { contains: search, mode: "insensitive" } },
+              { transactionRef: { contains: search, mode: "insensitive" } },
+              { user: { username: { contains: search, mode: "insensitive" } } },
+              { user: { email: { contains: search, mode: "insensitive" } } },
+              { user: { donationNotificationEmail: { contains: search, mode: "insensitive" } } },
+              { page: { slug: { contains: search, mode: "insensitive" } } },
+              { page: { displayName: { contains: search, mode: "insensitive" } } },
+              { page: { handle: { contains: search, mode: "insensitive" } } },
             ]
           : undefined,
       },
@@ -208,10 +227,30 @@ export class AdminController {
       take: 500,
       include: { user: { select: { id: true, username: true, email: true } }, page: { select: { slug: true, displayName: true } } },
     });
-    return rows.map((row) => ({
+    const localRows = rows.map((row) => ({
       ...row,
       source: row.qrPayload === "ADMIN_IMPORT" ? "import" : "tiphouse",
     }));
+    if (!search || userId) return localRows;
+
+    const creators = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } },
+          { donationNotificationEmail: { contains: search, mode: "insensitive" } },
+          { page: { slug: { contains: search, mode: "insensitive" } } },
+          { page: { displayName: { contains: search, mode: "insensitive" } } },
+          { page: { handle: { contains: search, mode: "insensitive" } } },
+        ],
+      },
+      include: { overlay: true, page: true },
+      take: 5,
+    });
+    const streamlabsRows = (await Promise.all(creators.map((creator) => this.streamlabsTransactions(creator)))).flat();
+    return [...localRows, ...streamlabsRows]
+      .sort((a, b) => new Date(b.paidAt ?? b.createdAt).getTime() - new Date(a.paidAt ?? a.createdAt).getTime())
+      .slice(0, 500);
   }
 
   @Post("transactions/import")
@@ -260,6 +299,25 @@ export class AdminController {
   @Post("transactions/:id/replay-alert")
   async replayAlert(@CurrentUser() user: JwtUser, @Param("id") id: string) {
     this.requireStaff(user);
+    if (id.startsWith("streamlabs:")) {
+      const [, creatorId, encodedExternalId] = id.split(":");
+      const externalId = decodeURIComponent(encodedExternalId ?? "");
+      const creator = await this.prisma.user.findUniqueOrThrow({
+        where: { id: creatorId },
+        include: { overlay: true, page: true },
+      });
+      const external = (await this.streamlabsTransactions(creator))
+        .find((row: any) => row.id === `streamlabs:${creatorId}:${encodeURIComponent(externalId)}`);
+      if (!external || !creator.overlay) throw new BadRequestException("Streamlabs transaction not found");
+      return this.alertDelivery.deliver(creator.overlay, {
+        donationId: external.id,
+        donorName: external.donorName,
+        amount: external.amount,
+        message: external.message,
+        anonymous: external.anonymous,
+        createdAt: external.paidAt,
+      });
+    }
     const donation = await this.prisma.donation.findUniqueOrThrow({
       where: { id },
       include: {
@@ -269,19 +327,59 @@ export class AdminController {
     });
     const overlay = donation.page.user.overlay ?? donation.user.overlay;
     if (!overlay?.streamerKey) return { ok: false, message: "Creator has no overlay URL" };
-    this.overlay.emitPaidDonation(overlay.streamerKey, {
+    return this.alertDelivery.deliver(overlay, {
+      donationId: donation.id,
       donorName: donation.anonymous ? "เธเธธเธเธเธฅเธเธดเธฃเธเธฒเธก" : donation.donorName,
       amount: donation.amount,
       message: donation.message,
       anonymous: donation.anonymous,
-      settings: {
-        theme: overlay.theme,
-        animation: overlay.animation,
-        soundUrl: overlay.soundUrl,
-        ttsEnabled: overlay.ttsEnabled,
-      },
+      createdAt: donation.paidAt?.toISOString() ?? donation.createdAt.toISOString(),
     });
-    return { ok: true };
+  }
+
+  private async streamlabsTransactions(creator: any) {
+    const streamlabs = creator.overlay?.theme?.streamlabs;
+    if (!streamlabs?.connected || !streamlabs?.accessToken || !creator.page) return [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    try {
+      const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
+        headers: { Authorization: `Bearer ${streamlabs.accessToken}` },
+        signal: controller.signal,
+      });
+      if (!response.ok) return [];
+      const body = await response.json() as any;
+      const items = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+      return items.map((item: any) => {
+        const externalId = String(item.donation_id ?? item.id ?? item.transaction_id ?? item.identifier ?? randomUUID());
+        const amount = Number(item.amount ?? item.formatted_amount ?? 0);
+        const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");
+        const paidAt = String(item.created_at ?? item.createdAt ?? item.date ?? new Date().toISOString());
+        return {
+          id: `streamlabs:${creator.id}:${encodeURIComponent(externalId)}`,
+          userId: creator.id,
+          pageId: creator.page.id,
+          donorName,
+          message: String(item.message ?? item.note ?? ""),
+          amount: Number.isFinite(amount) ? amount : 0,
+          anonymous: donorName.toLowerCase() === "anonymous",
+          paymentStatus: "PAID",
+          paymentProvider: "STREAMLABS",
+          transactionRef: item.identifier ? String(item.identifier) : `SL-${externalId}`,
+          qrPayload: null,
+          paidAt,
+          createdAt: paidAt,
+          updatedAt: paidAt,
+          source: "streamlabs",
+          user: { id: creator.id, username: creator.username, email: creator.email },
+          page: { slug: creator.page.slug, displayName: creator.page.displayName },
+        };
+      }).filter((item: any) => item.amount > 0);
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   @Delete("transactions/:id")

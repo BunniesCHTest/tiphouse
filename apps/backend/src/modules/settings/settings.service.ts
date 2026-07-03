@@ -1,20 +1,25 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { OverlayService } from "../overlay/overlay.service";
+import { encryptSecret } from "../../common/secret-box";
+import { AlertDeliveryService } from "../overlay/alert-delivery.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CompleteCreatorOnboardingDto, UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
+import { createFixedAmountThaiQr, verifyThaiQrPayload } from "../donations/thai-qr";
 
 @Injectable()
 export class SettingsService {
   constructor(
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly overlay: OverlayService,
+    private readonly alertDelivery: AlertDeliveryService,
   ) {}
 
   async getPayout(userId: string) {
     await this.ensureApproved(userId);
-    return this.prisma.payoutAccount.findUnique({ where: { userId } });
+    const payout = await this.prisma.payoutAccount.findUnique({ where: { userId } });
+    return this.publicPayout(payout);
   }
 
   async getProfile(userId: string) {
@@ -143,11 +148,40 @@ export class SettingsService {
 
   async upsertPayout(userId: string, dto: UpsertPayoutDto) {
     await this.ensureApproved(userId);
-    return this.prisma.payoutAccount.upsert({
+    const receivingQrPayload = dto.receivingQrPayload.replace(/\s+/g, "");
+    if (!verifyThaiQrPayload(receivingQrPayload)) {
+      throw new BadRequestException("QR Code รับเงินไม่ใช่ Thai QR Payment ที่ถูกต้อง");
+    }
+    // This also verifies that the QR contains a merchant account field and can
+    // be converted into a fixed-amount dynamic QR.
+    createFixedAmountThaiQr(receivingQrPayload, 10, "TIPHOUSE-CHECK");
+    const current = await this.prisma.payoutAccount.findUnique({
       where: { userId },
-      update: dto,
-      create: { userId, ...dto },
+      select: { slipOkBranchId: true, slipOkApiKeyEncrypted: true },
     });
+    const slipOkBranchId = dto.slipOkBranchId?.trim() || current?.slipOkBranchId || null;
+    const newApiKey = dto.slipOkApiKey?.trim();
+    const slipOkApiKeyEncrypted = newApiKey
+      ? encryptSecret(newApiKey, this.credentialEncryptionKey())
+      : current?.slipOkApiKeyEncrypted || null;
+    if ((slipOkBranchId || slipOkApiKeyEncrypted) && (!slipOkBranchId || !slipOkApiKeyEncrypted)) {
+      throw new BadRequestException("กรุณาระบุ SlipOK Branch ID และ API Key ให้ครบถ้วน");
+    }
+    const data = {
+      receivingQrImageUrl: dto.receivingQrImageUrl,
+      receivingQrPayload,
+      phone: dto.phone?.trim() || null,
+      contactEmail: dto.contactEmail?.trim().toLowerCase() || null,
+      slipOkBranchId,
+      slipOkApiKeyEncrypted,
+      payoutMethod: "QR_TRANSFER",
+    };
+    const payout = await this.prisma.payoutAccount.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    });
+    return this.publicPayout(payout);
   }
 
   async getOverlay(userId: string) {
@@ -196,19 +230,13 @@ export class SettingsService {
       await this.updateOverlay(userId, dto);
     }
     const overlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
-    this.overlay.emitPaidDonation(overlay.streamerKey, {
+    const delivery = await this.alertDelivery.deliver(overlay, {
       donorName: dto?.testDonorName ?? "Test Overlay",
       amount: Number(dto?.testAmount ?? 100),
       message: dto?.testMessage ?? "\u0e2a\u0e39\u0e49\u0e46\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a",
       anonymous: false,
-      settings: {
-        theme: overlay.theme,
-        animation: overlay.animation,
-        soundUrl: overlay.soundUrl,
-        ttsEnabled: overlay.ttsEnabled,
-      },
     });
-    return { ok: true, streamerKey: overlay.streamerKey };
+    return { ...delivery, streamerKey: overlay.streamerKey };
   }
 
   private async ensureApproved(userId: string) {
@@ -244,5 +272,24 @@ export class SettingsService {
       };
     }
     return JSON.parse(JSON.stringify(next));
+  }
+
+  private credentialEncryptionKey() {
+    const configured = this.config.get<string>("CREDENTIAL_ENCRYPTION_KEY")?.trim();
+    if (configured) return configured;
+    const developmentFallback = this.config.get<string>("NODE_ENV") !== "production"
+      ? this.config.get<string>("JWT_ACCESS_SECRET")?.trim()
+      : undefined;
+    if (developmentFallback) return developmentFallback;
+    throw new ServiceUnavailableException("ระบบยังไม่ได้ตั้งค่า CREDENTIAL_ENCRYPTION_KEY");
+  }
+
+  private publicPayout<T extends { slipOkApiKeyEncrypted?: string | null; slipOkBranchId?: string | null } | null>(payout: T) {
+    if (!payout) return null;
+    const { slipOkApiKeyEncrypted, ...publicData } = payout;
+    return {
+      ...publicData,
+      slipOkConfigured: Boolean(payout.slipOkBranchId && slipOkApiKeyEncrypted),
+    };
   }
 }

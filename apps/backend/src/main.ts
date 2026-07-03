@@ -11,11 +11,22 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   app.useLogger(app.get(Logger));
-  app.use(json({ limit: "20mb" }));
-  app.use(urlencoded({ extended: true, limit: "20mb" }));
+  app.use(json({ limit: "8mb" }));
+  app.use(urlencoded({ extended: true, limit: "8mb" }));
   app.use(helmet());
+  const allowedOrigins = config
+    .getOrThrow<string>("FRONTEND_URL")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
   app.enableCors({
-    origin: config.getOrThrow<string>("FRONTEND_URL"),
+    origin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+      if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ""))) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin is not allowed by CORS"));
+    },
     credentials: true,
   });
   app.setGlobalPrefix("api");

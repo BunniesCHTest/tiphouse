@@ -80,10 +80,12 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = dto.email
-      ? await this.prisma.user.findUnique({ where: { email: dto.email } })
-      : dto.username
-        ? await this.prisma.user.findUnique({ where: { username: dto.username } })
+    const email = dto.email?.trim().toLowerCase();
+    const username = dto.username?.trim();
+    const user = email
+      ? await this.prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } })
+      : username
+        ? await this.prisma.user.findFirst({ where: { username: { equals: username, mode: "insensitive" } } })
         : null;
     if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
       throw new UnauthorizedException("Invalid credentials");

@@ -402,13 +402,14 @@ export default function OverlaySettingsPage() {
     setPreviewAlert(nextAlert);
     localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
     try {
-      await api.post("/settings/overlay/test", {
+      const { data } = await api.post("/settings/overlay/test", {
         ...overlayPayload(settings),
         testDonorName: nextAlert.donorName,
         testAmount: String(nextAlert.amount),
         testMessage: nextAlert.message,
       }, { headers: authHeaders() });
-      setNotice("ส่งทดสอบ Overlay แล้ว");
+      if (!data?.ok) throw new Error(data?.reason ?? "Alert delivery failed");
+      setNotice(data.provider === "streamlabs" ? "ส่ง Alert ทดสอบไปยัง Streamlabs แล้ว" : "ส่งทดสอบ Overlay ของ TipHouse แล้ว");
     } catch {
       setError("ส่งทดสอบ Overlay ไม่สำเร็จ กรุณาตรวจสอบว่า backend และ OBS Overlay URL เปิดอยู่");
     }
@@ -465,7 +466,7 @@ export default function OverlaySettingsPage() {
             <Link className="btn" href={previewUrl} target="_blank">เปิด Overlay</Link>
           </form>
           <div className={`card place-items-center p-5 ${activeTab === "alert" ? "grid" : "hidden"}`}>
-            <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" srcDoc={previewSrcDoc} title="Overlay preview" />
+            <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" sandbox="allow-scripts" srcDoc={previewSrcDoc} title="Overlay preview" />
           </div>
           <form onSubmit={submit} className={`card gap-4 p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
             <label>Donate Goal URL<input className="input mt-2" readOnly value={goalOverlayUrl} /></label>
@@ -484,7 +485,7 @@ export default function OverlaySettingsPage() {
             <button className="btn btn-primary" type="submit">บันทึก Donate Goal</button>
           </form>
           <div className={`card place-items-center p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
-            <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />
+            <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" sandbox="allow-scripts" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />
           </div>
         </section>
       </main>

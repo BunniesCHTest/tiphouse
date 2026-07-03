@@ -94,6 +94,7 @@ export default function DonationPageSettings() {
   const [bannerInputKey, setBannerInputKey] = useState(0);
   const [backgroundInputKey, setBackgroundInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<SaveStatus | null>(null);
   const [minAmountWarning, setMinAmountWarning] = useState(false);
 
@@ -103,9 +104,6 @@ export default function DonationPageSettings() {
     if (cached) {
       const parsed = { ...defaults, ...JSON.parse(cached) };
       cachedSettings = parsed;
-      setSettings(parsed);
-      if (parsed.bannerUrl) setBannerPreview(parsed.bannerUrl);
-      if (parsed.donationBackgroundUrl) setBackgroundPreview(parsed.donationBackgroundUrl);
     }
 
     api.get("/settings/page", { headers: authHeaders() }).then((res) => {
@@ -125,7 +123,7 @@ export default function DonationPageSettings() {
       setSettings(cachedSettings);
       if (cachedSettings.bannerUrl) setBannerPreview(cachedSettings.bannerUrl);
       if (cachedSettings.donationBackgroundUrl) setBackgroundPreview(cachedSettings.donationBackgroundUrl);
-    });
+    }).finally(() => setLoading(false));
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -218,6 +216,15 @@ export default function DonationPageSettings() {
   return (
     <AuthGate>
       <Nav />
+      {loading ? (
+        <main className="mx-auto w-[min(980px,calc(100%-2rem))] py-10">
+          <div className="h-12 w-72 animate-pulse rounded-lg bg-white/10" />
+          <section className="card mt-8 grid gap-5 p-5">
+            {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-white/10" />)}
+            <div className="h-44 animate-pulse rounded-lg bg-white/10" />
+          </section>
+        </main>
+      ) : (
       <main className="mx-auto w-[min(980px,calc(100%-2rem))] py-10">
         {status && (
           <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 px-4">
@@ -293,6 +300,7 @@ export default function DonationPageSettings() {
           <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountWarning}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
         </form>
       </main>
+      )}
     </AuthGate>
   );
 }

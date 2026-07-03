@@ -20,9 +20,23 @@ export class OverlayService {
       _sum: { amount: true },
     });
     const theme = typeof overlay.theme === "object" && overlay.theme ? overlay.theme as Record<string, any> : {};
+    const streamlabs = typeof theme.streamlabs === "object" && theme.streamlabs ? theme.streamlabs : undefined;
+    const safeTheme = {
+      ...theme,
+      ...(streamlabs
+        ? {
+            streamlabs: {
+              connected: Boolean(streamlabs.connected),
+              alertBoxEnabled: Boolean(streamlabs.alertBoxEnabled),
+              username: streamlabs.username,
+            },
+          }
+        : {}),
+    };
     const donateGoal = typeof theme.donateGoal === "object" && theme.donateGoal ? theme.donateGoal : {};
     return {
       ...overlay,
+      theme: safeTheme,
       donationGoal: {
         title: donateGoal.title ?? overlay.user.page?.displayName ?? "Donate Goal",
         currentAmount: total._sum.amount ?? 0,

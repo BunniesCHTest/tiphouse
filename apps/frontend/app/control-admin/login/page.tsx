@@ -21,9 +21,9 @@ export default function AdminLoginPage() {
     const form = new FormData(event.currentTarget);
     try {
       const { data } = await api.post("/auth/login", {
-        username: form.get("username"),
+        username: String(form.get("username") ?? "").trim(),
         password: form.get("password"),
-      });
+      }, { timeout: 120_000 });
       if (data.user.role !== "ADMIN" && data.user.role !== "ACCOUNTING") throw new Error("not admin");
       saveSession(data.user, data.tokens.accessToken, "admin");
       router.push(data.user.passwordMustChange ? "/control-admin/change-password" : "/control-admin");
@@ -33,7 +33,7 @@ export default function AdminLoginPage() {
         router.push("/control-admin");
         return;
       }
-      setError("Admin login ไม่สำเร็จ");
+      setError("Admin login ไม่สำเร็จ กรุณาตรวจสอบ backend และฐานข้อมูล");
     } finally {
       setLoading(false);
     }
@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
         <label>Password<input className="input mt-2" name="password" type="password" placeholder="Abc@1234" required /></label>
         {error && <p className="text-coral">{error}</p>}
         <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
-          {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ Admin"}
+          {loading ? "กำลังเชื่อมต่อ backend..." : "เข้าสู่ระบบ Admin"}
         </button>
       </form>
     </main>

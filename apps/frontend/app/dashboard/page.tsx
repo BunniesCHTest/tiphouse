@@ -105,16 +105,6 @@ function formatGroupLabel(label: string, viewBy: ViewBy, language: string) {
   return label;
 }
 
-function triggerOverlayAgain(item: HistoryRow) {
-  localStorage.setItem("tiphouse_overlay_donation", JSON.stringify({
-    donorName: item.anonymous ? "บุคคลนิรนาม" : item.tipper,
-    amount: item.amount,
-    message: item.message,
-    anonymous: Boolean(item.anonymous),
-    nonce: Date.now(),
-  }));
-}
-
 export default function DashboardPage() {
   const { language, t } = useAppPreferences();
   const [data, setData] = useState<any>(null);
@@ -125,6 +115,7 @@ export default function DashboardPage() {
   const [toDate, setToDate] = useState(defaultToDate);
   const [historyPage, setHistoryPage] = useState(1);
   const [transactionPage, setTransactionPage] = useState(1);
+  const [alertNotice, setAlertNotice] = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -223,8 +214,9 @@ export default function DashboardPage() {
   }
 
   async function replayDashboardAlert(item: HistoryRow) {
+    setAlertNotice("");
     try {
-      await api.post(
+      const { data } = await api.post(
         "/settings/overlay/test",
         {
           testDonorName: item.anonymous ? "บุคคลนิรนาม" : item.tipper,
@@ -233,8 +225,10 @@ export default function DashboardPage() {
         },
         { headers: authHeaders() },
       );
+      if (!data?.ok) throw new Error(data?.reason ?? "Alert delivery failed");
+      setAlertNotice(data.provider === "streamlabs" ? "ส่ง Alert ซ้ำผ่าน Streamlabs แล้ว" : "ส่ง Alert ซ้ำผ่าน TipHouse แล้ว");
     } catch {
-      triggerOverlayAgain(item);
+      setAlertNotice("ส่ง Alert ซ้ำไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า Overlay และ Streamlabs");
     }
   }
 
@@ -280,7 +274,7 @@ export default function DashboardPage() {
                   <h2 className="pt-1 text-2xl font-black leading-none">{t("สถิติรายได้", "Revenue Analytics")}</h2>
                   {usingFallbackRows && (
                     <p className="mt-3 text-sm text-gold">
-                      {t("ไม่มีรายการในช่วง From/To จึงแสดงรายการล่าสุดแทน", "No records were found in the From/To range, so the latest records are shown instead.")}
+                      {t("ไม่มีรายการในช่วง From/To จึงแสดงรายการล่าสุด", "No records were found in the From/To range, so the latest records are shown.")}
                     </p>
                   )}
                 </div>
@@ -328,6 +322,7 @@ export default function DashboardPage() {
                 <h2 className="text-2xl font-black">{t("ประวัติโดเนท", "Donation History")}</h2>
                 <p className="text-sm text-white/55">{t("แสดง", "Showing")} {pagedRows.length} / {visibleRows.length}</p>
               </div>
+              {alertNotice && <p className="mb-3 text-sm font-bold text-gold">{alertNotice}</p>}
               <table className="w-full min-w-[980px] table-fixed border-separate border-spacing-y-2 text-left">
                 <thead className="text-white/60">
                   <tr>
