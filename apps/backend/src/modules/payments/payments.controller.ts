@@ -1,6 +1,5 @@
-import { Body, Controller, Headers, Param, Post, RawBodyRequest, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Headers, Post, RawBodyRequest, Req } from "@nestjs/common";
 import { Request } from "express";
-import { FileInterceptor } from "@nestjs/platform-express";
 import { PaymentsService } from "./payments.service";
 
 @Controller("payment")
@@ -25,19 +24,4 @@ export class PaymentsController {
     return this.payments.handleStripeWebhook(request.rawBody, signature);
   }
 
-  @Post("slip/:ref/verify")
-  @UseInterceptors(FileInterceptor("slip", {
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (_request, file, callback) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp"];
-      const accepted = allowed.includes(file.mimetype);
-      callback(accepted ? null : new Error("Slip must be JPG, PNG, or WEBP"), accepted);
-    },
-  }))
-  verifySlip(
-    @Param("ref") ref: string,
-    @UploadedFile() slip?: { buffer: Buffer; mimetype: string; originalname: string; size: number },
-  ) {
-    return this.payments.verifySlip(ref, slip);
-  }
 }

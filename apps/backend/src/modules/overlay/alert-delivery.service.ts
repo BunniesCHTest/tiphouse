@@ -20,6 +20,17 @@ type AlertPayload = {
   createdAt?: string;
 };
 
+type DeliveryOptions = {
+  recordStreamlabsHistory?: boolean;
+};
+
+type StreamlabsDelivery = {
+  ok: boolean;
+  provider: "streamlabs";
+  status?: number;
+  reason?: string;
+};
+
 @Injectable()
 export class AlertDeliveryService {
   private readonly logger = new Logger(AlertDeliveryService.name);
@@ -29,13 +40,19 @@ export class AlertDeliveryService {
     private readonly overlay: OverlayService,
   ) {}
 
-  async deliver(overlay: OverlayRecord, payload: AlertPayload) {
+  async deliver(overlay: OverlayRecord, payload: AlertPayload, options: DeliveryOptions = {}) {
     const streamlabs = this.streamlabsSettings(overlay.theme);
-    if (streamlabs?.alertBoxEnabled) {
-      if (!streamlabs.connected || !streamlabs.accessToken) {
-        return { ok: false, provider: "streamlabs", reason: "Streamlabs is not connected" };
+    let streamlabsDelivery: StreamlabsDelivery | undefined;
+    if (streamlabs?.connected && streamlabs.accessToken && (options.recordStreamlabsHistory || streamlabs.alertBoxEnabled)) {
+      const delivery = await this.deliverToStreamlabs(
+        streamlabs.accessToken,
+        payload,
+        !streamlabs.alertBoxEnabled,
+      );
+      streamlabsDelivery = delivery;
+      if (streamlabs.alertBoxEnabled && delivery.ok) {
+        return delivery;
       }
-      return this.deliverToStreamlabs(streamlabs.accessToken, payload);
     }
 
     this.overlay.emitPaidDonation(overlay.streamerKey, {
@@ -47,12 +64,21 @@ export class AlertDeliveryService {
         ttsEnabled: overlay.ttsEnabled,
       },
     });
-    return { ok: true, provider: "tiphouse" };
+    return {
+      ok: true,
+      provider: "tiphouse",
+      streamlabsHistory: streamlabsDelivery,
+      fallbackReason: streamlabs?.alertBoxEnabled
+        ? streamlabsDelivery?.reason ?? "Streamlabs is not connected"
+        : undefined,
+    };
   }
 
-  private async deliverToStreamlabs(accessToken: string, payload: AlertPayload) {
+  private async deliverToStreamlabs(accessToken: string, payload: AlertPayload, skipAlert: boolean): Promise<StreamlabsDelivery> {
     const donationId = payload.donationId ?? "test";
     const deliveryId = `${donationId}-${randomUUID()}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await fetch("https://streamlabs.com/api/v2.0/donations", {
         method: "POST",
@@ -68,10 +94,16 @@ export class AlertDeliveryService {
           currency: "THB",
           message: payload.message.slice(0, 254),
           created_at: payload.createdAt ?? new Date().toISOString(),
-          skip_alert: "no",
+          skip_alert: skipAlert ? "yes" : "no",
         }),
+        signal: controller.signal,
       });
-      await this.logDelivery(donationId, response.ok, { deliveryId, status: response.status, ok: response.ok });
+      await this.logDelivery(donationId, response.ok, {
+        deliveryId,
+        status: response.status,
+        ok: response.ok,
+        skipAlert,
+      });
       return {
         ok: response.ok,
         provider: "streamlabs",
@@ -83,6 +115,8 @@ export class AlertDeliveryService {
       this.logger.warn(`Streamlabs alert delivery failed: ${reason}`);
       await this.logDelivery(donationId, false, { deliveryId, error: reason });
       return { ok: false, provider: "streamlabs", reason };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

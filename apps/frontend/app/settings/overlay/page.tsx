@@ -409,9 +409,18 @@ export default function OverlaySettingsPage() {
         testMessage: nextAlert.message,
       }, { headers: authHeaders() });
       if (!data?.ok) throw new Error(data?.reason ?? "Alert delivery failed");
-      setNotice(data.provider === "streamlabs" ? "ส่ง Alert ทดสอบไปยัง Streamlabs แล้ว" : "ส่งทดสอบ Overlay ของ TipHouse แล้ว");
-    } catch {
-      setError("ส่งทดสอบ Overlay ไม่สำเร็จ กรุณาตรวจสอบว่า backend และ OBS Overlay URL เปิดอยู่");
+      if (data.provider === "streamlabs") {
+        setNotice("ส่ง Alert ทดสอบไปยัง Streamlabs แล้ว");
+      } else if (data.fallbackReason) {
+        setNotice(`ส่งทดสอบ Overlay ของ TipHouse แล้ว (Streamlabs ใช้งานไม่ได้: ${data.fallbackReason})`);
+      } else {
+        setNotice("ส่งทดสอบ Overlay ของ TipHouse แล้ว");
+      }
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { message?: string | string[] } }; message?: string })?.response?.data?.message;
+      setError(Array.isArray(message)
+        ? message.join(", ")
+        : message ?? (cause as Error)?.message ?? "ส่งทดสอบ Overlay ไม่สำเร็จ");
     }
   }
 

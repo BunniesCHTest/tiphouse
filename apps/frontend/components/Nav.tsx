@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, authHeaders } from "@/lib/api";
-import { clearSession, getSession, setSessionValue, userCacheKey } from "@/lib/session";
+import { clearSession, getSession, SESSION_CHANGED_EVENT, setSessionValue, userCacheKey } from "@/lib/session";
 import { useAppPreferences } from "@/lib/app-preferences";
 
 export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
@@ -16,15 +16,17 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   const [donationSlug, setDonationSlug] = useState("bunniesch");
 
   useEffect(() => {
-    const session = getSession("user");
+    const applySession = () => {
+      const session = getSession("user");
+      setLoggedIn(Boolean(session.accessToken));
+      setRole(session.role);
+      setApproved(session.role === "ADMIN" || (session.accountStatus === "APPROVED" && session.creatorSetupCompleted));
+      return session;
+    };
+    const session = applySession();
     const token = session.accessToken;
     const storedRole = session.role;
     const storedStatus = session.accountStatus;
-    const storedSetupCompleted = session.creatorSetupCompleted;
-    setLoggedIn(Boolean(token));
-    setRole(storedRole);
-    setApproved(storedRole === "ADMIN" || (storedStatus === "APPROVED" && storedSetupCompleted));
-
     const cached = localStorage.getItem(userCacheKey("donation_slug"));
     if (cached) setDonationSlug(cached);
 
@@ -43,15 +45,25 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
           setDonationSlug(nextSlug);
           localStorage.setItem(userCacheKey("donation_slug"), nextSlug);
         }
-      }).catch(() => undefined);
+      }).catch((cause) => {
+        const status = (cause as { response?: { status?: number } })?.response?.status;
+        if (status === 401 || status === 403) clearSession("user");
+      });
     }
 
     const onPageUpdated = (event: Event) => {
       const detail = (event as CustomEvent<{ slug?: string }>).detail;
       if (detail?.slug) setDonationSlug(detail.slug);
     };
+    const onSessionChanged = () => applySession();
     window.addEventListener("tiphouse:page-updated", onPageUpdated);
-    return () => window.removeEventListener("tiphouse:page-updated", onPageUpdated);
+    window.addEventListener(SESSION_CHANGED_EVENT, onSessionChanged);
+    window.addEventListener("storage", onSessionChanged);
+    return () => {
+      window.removeEventListener("tiphouse:page-updated", onPageUpdated);
+      window.removeEventListener(SESSION_CHANGED_EVENT, onSessionChanged);
+      window.removeEventListener("storage", onSessionChanged);
+    };
   }, []);
 
   function logout() {
@@ -59,7 +71,8 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
     setLoggedIn(false);
     setRole("");
     setApproved(false);
-    router.push("/");
+    router.replace("/");
+    router.refresh();
   }
 
   const showPublicMenu = !loggedIn || publicOnly;
