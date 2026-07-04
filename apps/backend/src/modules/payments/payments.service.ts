@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, GoneException, Injectable, Serv
 import { ConfigService } from "@nestjs/config";
 import { PaymentProvider } from "@prisma/client";
 import { createHash } from "crypto";
-import Stripe from "stripe";
+import Stripe = require("stripe");
 import { decryptSecret } from "../../common/secret-box";
 import { DonationsService } from "../donations/donations.service";
 import { thaiQrRecipientValues } from "../donations/thai-qr";

@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { DonationStatus, PaymentProvider, Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import * as QRCode from "qrcode";
-import Stripe from "stripe";
+import Stripe = require("stripe");
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateDonationDto, UpdateDonationPageDto } from "./dto";
 import { createFixedAmountThaiQr } from "./thai-qr";
@@ -239,8 +239,11 @@ export class DonationsService {
   }
 
   private paymentProvider() {
-    const configured = this.config.get<string>("PAYMENT_PROVIDER", "PROMPTPAY").trim().toUpperCase();
+    const configured = this.config.get<string>("PAYMENT_PROVIDER", "STRIPE").trim().toUpperCase();
     if (configured === PaymentProvider.STRIPE) return PaymentProvider.STRIPE;
+    if (this.config.get<string>("NODE_ENV") === "production") {
+      throw new ServiceUnavailableException("PAYMENT_PROVIDER must be STRIPE in production");
+    }
     return PaymentProvider.PROMPTPAY;
   }
 

@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { randomUUID } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OverlayService } from "./overlay.service";
 
@@ -76,39 +75,42 @@ export class AlertDeliveryService {
 
   private async deliverToStreamlabs(accessToken: string, payload: AlertPayload, skipAlert: boolean): Promise<StreamlabsDelivery> {
     const donationId = payload.donationId ?? "test";
-    const deliveryId = `${donationId}-${randomUUID()}`;
+    const deliveryId = `tiphouse-${donationId}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
+      const body = new URLSearchParams({
+        name: payload.donorName.slice(0, 25).padEnd(2, "_"),
+        identifier: deliveryId,
+        amount: String(payload.amount),
+        currency: "THB",
+        message: payload.message.slice(0, 254),
+        created_at: payload.createdAt ?? new Date().toISOString(),
+        skip_alert: skipAlert ? "yes" : "no",
+      });
       const response = await fetch("https://streamlabs.com/api/v2.0/donations", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
           "X-Requested-With": "XMLHttpRequest",
         },
-        body: JSON.stringify({
-          name: payload.donorName.slice(0, 25).padEnd(2, "_"),
-          identifier: deliveryId,
-          amount: payload.amount,
-          currency: "THB",
-          message: payload.message.slice(0, 254),
-          created_at: payload.createdAt ?? new Date().toISOString(),
-          skip_alert: skipAlert ? "yes" : "no",
-        }),
+        body,
         signal: controller.signal,
       });
+      const responseText = (await response.text()).slice(0, 500);
       await this.logDelivery(donationId, response.ok, {
         deliveryId,
         status: response.status,
         ok: response.ok,
         skipAlert,
+        response: responseText,
       });
       return {
         ok: response.ok,
         provider: "streamlabs",
         status: response.status,
-        reason: response.ok ? undefined : `Streamlabs returned HTTP ${response.status}`,
+        reason: response.ok ? undefined : `Streamlabs returned HTTP ${response.status}: ${responseText}`,
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown";

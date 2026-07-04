@@ -39,6 +39,15 @@ type TestAlert = {
   message: string;
 };
 
+type SaveStatus = {
+  type: "success" | "error";
+  title: string;
+  message: string;
+};
+
+const MAX_ALERT_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_ALERT_SOUND_BYTES = 3 * 1024 * 1024;
+
 const THAI_DIGITS = [
   "\u0e28\u0e39\u0e19\u0e22\u0e4c",
   "\u0e2b\u0e19\u0e36\u0e48\u0e07",
@@ -271,7 +280,7 @@ function fillTemplate(value: string, alert: TestAlert) {
 
 function overlayPayload(settings: OverlaySettings) {
   return {
-    soundUrl: settings.customSoundUrl || undefined,
+    soundUrl: settings.customSoundUrl || "",
     streamerKey: settings.streamerKey,
     ttsEnabled: settings.ttsEnabled,
     theme: {
@@ -339,6 +348,8 @@ function fileToDataUrl(file: File) {
 export default function OverlaySettingsPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
   const [previewAlert, setPreviewAlert] = useState<TestAlert>(randomTestAlert);
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
@@ -368,10 +379,29 @@ export default function OverlaySettingsPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    await api.patch("/settings/overlay", overlayPayload(settings), { headers: authHeaders() });
-    localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(settings));
-    localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
-    setNotice(THAI_SAVE_OK);
+    setNotice("");
+    setSaveStatus(null);
+    setSaving(true);
+    try {
+      const { data } = await api.patch("/settings/overlay", overlayPayload(settings), { headers: authHeaders() });
+      const next = normalizeOverlay(data, settings);
+      setSettings(next);
+      localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
+      localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
+      setNotice(THAI_SAVE_OK);
+      setSaveStatus({
+        type: "success",
+        title: "บันทึกสำเร็จ",
+        message: "ระบบบันทึกการตั้งค่า Overlay ลงฐานข้อมูลเรียบร้อยแล้ว",
+      });
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { message?: string | string[] } }; message?: string })?.response?.data?.message;
+      const detail = Array.isArray(message) ? message.join(", ") : message ?? (cause as Error)?.message ?? "กรุณาตรวจสอบข้อมูลหรือ backend";
+      setError(detail);
+      setSaveStatus({ type: "error", title: "บันทึกไม่สำเร็จ", message: detail });
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function resetOverlayUrl() {
@@ -426,19 +456,47 @@ export default function OverlaySettingsPage() {
 
   async function onAlertImageSelected(file?: File) {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setSettings({ ...settings, alertImageUrl: dataUrl });
+    if (file.size > MAX_ALERT_IMAGE_BYTES) {
+      setSaveStatus({ type: "error", title: "ไฟล์รูปใหญ่เกินไป", message: "กรุณาใช้ไฟล์รูปขนาดไม่เกิน 2MB" });
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setSettings((current) => ({ ...current, alertImageUrl: dataUrl }));
+    } catch {
+      setSaveStatus({ type: "error", title: "อ่านไฟล์รูปไม่สำเร็จ", message: "กรุณาเลือกไฟล์รูปใหม่อีกครั้ง" });
+    }
   }
 
   async function onSoundSelected(file?: File) {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setSettings({ ...settings, customSoundUrl: dataUrl, soundPreset: "none" });
+    if (file.size > MAX_ALERT_SOUND_BYTES) {
+      setSaveStatus({ type: "error", title: "ไฟล์เสียงใหญ่เกินไป", message: "กรุณาใช้ไฟล์เสียงขนาดไม่เกิน 3MB" });
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setSettings((current) => ({ ...current, customSoundUrl: dataUrl, soundPreset: "none" }));
+    } catch {
+      setSaveStatus({ type: "error", title: "อ่านไฟล์เสียงไม่สำเร็จ", message: "กรุณาเลือกไฟล์เสียงใหม่อีกครั้ง" });
+    }
   }
 
   return (
     <AuthGate>
       <Nav />
+      {saveStatus && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4">
+          <section className="card w-full max-w-md p-6 text-center">
+            <span className={`badge ${saveStatus.type === "success" ? "text-mint" : "text-coral"}`}>
+              {saveStatus.type === "success" ? "SUCCESS" : "ERROR"}
+            </span>
+            <h2 className="mt-3 text-3xl font-black">{saveStatus.title}</h2>
+            <p className="mt-2 text-white/65">{saveStatus.message}</p>
+            <button className="btn mt-5" type="button" onClick={() => setSaveStatus(null)}>ปิด</button>
+          </section>
+        </div>
+      )}
       <main className="mx-auto w-[min(1100px,calc(100%-2rem))] py-10">
         <p className="font-bold text-mint">Browser Source</p>
         <h1 className="mt-3 text-5xl font-black">ตั้งค่า Overlay</h1>
@@ -470,7 +528,7 @@ export default function OverlaySettingsPage() {
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" name="widgetJs" value={settings.widgetJs} onChange={(event) => setSettings({ ...settings, widgetJs: event.target.value })} /></label>
             {notice && <p className="text-mint">{notice}</p>}
             {error && <p className="text-coral">{error}</p>}
-            <button className="btn btn-primary" type="submit">บันทึก Overlay</button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึก Overlay"}</button>
             <button className="btn" type="button" onClick={testOverlay}>ทดสอบ Overlay</button>
             <Link className="btn" href={previewUrl} target="_blank">เปิด Overlay</Link>
           </form>
@@ -491,7 +549,7 @@ export default function OverlaySettingsPage() {
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" value={settings.goalJs} onChange={(event) => setSettings({ ...settings, goalJs: event.target.value })} /></label>
             {notice && <p className="text-mint">{notice}</p>}
             {error && <p className="text-coral">{error}</p>}
-            <button className="btn btn-primary" type="submit">บันทึก Donate Goal</button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึก Donate Goal"}</button>
           </form>
           <div className={`card place-items-center p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
             <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" sandbox="allow-scripts" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />

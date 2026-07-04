@@ -25,6 +25,7 @@ type QrState = {
   qrDataUrl: string;
   qrDisplayName: string;
   transactionRef: string;
+  paymentProvider: "STRIPE";
   amount: number;
   createdAt: string;
   expiresAt: string;
@@ -197,10 +198,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       if (Number(data.amount) !== amountNumber || !data.transactionRef) {
         throw new Error("Donation transaction does not match the requested amount");
       }
+      if (data.paymentProvider !== "STRIPE") {
+        throw new Error("ระบบชำระเงินยังไม่ได้ตั้งค่า Stripe กรุณาอย่าชำระเงินและแจ้ง Creator");
+      }
       setQr({
         qrDataUrl: data.qrDataUrl,
         qrDisplayName: data.qrDisplayName ?? page.donationAccountName ?? "TipHouse Donate",
         transactionRef: data.transactionRef,
+        paymentProvider: data.paymentProvider,
         amount: Number(data.amount),
         createdAt: data.createdAt,
         expiresAt: data.expiresAt,
@@ -444,8 +449,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               <section className="draft-panel grid gap-2 text-left">
                 <p className="font-black text-mint">{t("กำลังรอผลการชำระเงินอัตโนมัติ", "Waiting for automatic payment confirmation")}</p>
                 <p className="text-sm text-white/55">{t(
-                  "ระบบจะยืนยันผ่าน Stripe และส่ง Alert หลังได้รับ webhook ที่ถูกต้อง",
-                  "Stripe will confirm the payment and the alert will be sent after a valid webhook is received.",
+                  "ระบบจะยืนยันการชำระเงินของท่านและจะส่ง Alert หลังการโอนเสร็จสิ้น",
+                  "Your payment will be confirmed and the alert will be sent after the transfer is complete.",
                 )}</p>
               </section>
               <p className="break-all text-xs text-white/55">Ref: {qr.transactionRef}</p>
