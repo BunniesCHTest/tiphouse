@@ -1,14 +1,19 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { DonationStatus, Prisma } from "@prisma/client";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { DonationStatus, PaymentProvider, Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import * as QRCode from "qrcode";
+import Stripe from "stripe";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateDonationDto, UpdateDonationPageDto } from "./dto";
 import { createFixedAmountThaiQr } from "./thai-qr";
 
 @Injectable()
 export class DonationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getPublicPage(slug: string) {
     const page = await this.prisma.donationPage.findUnique({
@@ -126,20 +131,10 @@ export class DonationsService {
     if (dto.amount < page.minAmount) throw new BadRequestException(`Minimum donation is ${page.minAmount}`);
     if (dto.amount > 20000) throw new BadRequestException("Maximum donation is 20000");
 
-    const receivingQrPayload = page.user.payout?.receivingQrPayload;
-    if (!receivingQrPayload) {
-      throw new BadRequestException("Creator has not configured a receiving QR Code");
-    }
     const transactionRef = `TH${randomBytes(8).toString("hex").toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    const qrPayload = createFixedAmountThaiQr(receivingQrPayload, dto.amount, transactionRef);
-    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: 360,
-    });
-
-    const donation = await this.prisma.donation.create({
+    const paymentProvider = this.paymentProvider();
+    let donation = await this.prisma.donation.create({
       data: {
         userId: page.userId,
         pageId: page.id,
@@ -147,19 +142,93 @@ export class DonationsService {
         message: dto.message,
         amount: dto.amount,
         anonymous: dto.anonymous,
-        paymentProvider: dto.provider,
+        paymentProvider,
         transactionRef,
-        qrPayload,
         expiresAt,
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       },
     });
 
+    if (paymentProvider === PaymentProvider.STRIPE) {
+      try {
+        const stripe = this.stripe();
+        const intent = await stripe.paymentIntents.create({
+          amount: donation.amount * 100,
+          currency: "thb",
+          payment_method_types: ["promptpay"],
+          payment_method_data: { type: "promptpay" },
+          confirm: true,
+          description: `TipHouse donation to ${page.displayName}`,
+          metadata: {
+            transactionRef,
+            donationId: donation.id,
+            creatorUserId: page.userId,
+            pageSlug: page.slug,
+          },
+        }, {
+          idempotencyKey: transactionRef,
+        });
+        const promptPay = intent.next_action?.type === "promptpay_display_qr_code"
+          ? intent.next_action.promptpay_display_qr_code
+          : undefined;
+        if (!promptPay?.image_url_png) {
+          throw new ServiceUnavailableException("Stripe did not return a PromptPay QR Code");
+        }
+        donation = await this.prisma.donation.update({
+          where: { id: donation.id },
+          data: {
+            providerTransactionId: intent.id,
+            qrPayload: promptPay.data,
+          },
+        });
+        return {
+          donationId: donation.id,
+          transactionRef,
+          status: donation.paymentStatus,
+          paymentProvider,
+          qrPayload: promptPay.data,
+          qrDataUrl: promptPay.image_url_png,
+          hostedInstructionsUrl: promptPay.hosted_instructions_url,
+          qrDisplayName: page.displayName,
+          amount: donation.amount,
+          createdAt: donation.createdAt,
+          expiresAt,
+        };
+      } catch (error) {
+        await this.prisma.donation.updateMany({
+          where: { id: donation.id, paymentStatus: DonationStatus.PENDING },
+          data: { paymentStatus: DonationStatus.FAILED },
+        });
+        if (error instanceof ServiceUnavailableException) throw error;
+        throw new ServiceUnavailableException("Unable to create Stripe PromptPay payment");
+      }
+    }
+
+    const receivingQrPayload = page.user.payout?.receivingQrPayload;
+    if (!receivingQrPayload) {
+      await this.prisma.donation.update({
+        where: { id: donation.id },
+        data: { paymentStatus: DonationStatus.FAILED },
+      });
+      throw new BadRequestException("Creator has not configured a receiving QR Code");
+    }
+    const qrPayload = createFixedAmountThaiQr(receivingQrPayload, dto.amount, transactionRef);
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 360,
+    });
+    donation = await this.prisma.donation.update({
+      where: { id: donation.id },
+      data: { qrPayload },
+    });
+
     return {
       donationId: donation.id,
       transactionRef,
       status: donation.paymentStatus,
+      paymentProvider,
       qrPayload,
       qrDataUrl,
       qrDisplayName: page.donationAccountName,
@@ -169,6 +238,18 @@ export class DonationsService {
     };
   }
 
+  private paymentProvider() {
+    const configured = this.config.get<string>("PAYMENT_PROVIDER", "PROMPTPAY").trim().toUpperCase();
+    if (configured === PaymentProvider.STRIPE) return PaymentProvider.STRIPE;
+    return PaymentProvider.PROMPTPAY;
+  }
+
+  private stripe() {
+    const secretKey = this.config.get<string>("STRIPE_SECRET_KEY")?.trim();
+    if (!secretKey) throw new ServiceUnavailableException("STRIPE_SECRET_KEY is not configured");
+    return new Stripe(secretKey);
+  }
+
   async paymentStatus(transactionRef: string) {
     const donation = await this.prisma.donation.findUnique({
       where: { transactionRef },
@@ -176,6 +257,8 @@ export class DonationsService {
         transactionRef: true,
         amount: true,
         paymentStatus: true,
+        paymentProvider: true,
+        providerTransactionId: true,
         createdAt: true,
         expiresAt: true,
         paidAt: true,
@@ -189,6 +272,9 @@ export class DonationsService {
         where: { transactionRef, paymentStatus: DonationStatus.PENDING },
         data: { paymentStatus: DonationStatus.EXPIRED },
       });
+      if (donation.paymentProvider === PaymentProvider.STRIPE && donation.providerTransactionId) {
+        await this.stripe().paymentIntents.cancel(donation.providerTransactionId).catch(() => undefined);
+      }
     }
     return {
       transactionRef: donation.transactionRef,

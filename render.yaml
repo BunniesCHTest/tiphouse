@@ -29,6 +29,12 @@ services:
         sync: false
       - key: GBPRIMEPAY_SECRET
         sync: false
+      - key: PAYMENT_PROVIDER
+        value: STRIPE
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
       - key: STREAMLABS_CLIENT_ID
         sync: false
       - key: STREAMLABS_CLIENT_SECRET

@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, GoneException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { PaymentProvider } from "@prisma/client";
 import { createHash } from "crypto";
+import Stripe from "stripe";
 import { decryptSecret } from "../../common/secret-box";
 import { DonationsService } from "../donations/donations.service";
 import { thaiQrRecipientValues } from "../donations/thai-qr";
@@ -74,6 +76,67 @@ export class PaymentsService {
 
     if (data.status !== "paid" || !data.transactionRef) return { ok: true, ignored: true };
     return this.finalizePaidDonation(data.transactionRef);
+  }
+
+  async handleStripeWebhook(rawBody?: Buffer, signature?: string) {
+    const secretKey = this.config.get<string>("STRIPE_SECRET_KEY")?.trim();
+    const webhookSecret = this.config.get<string>("STRIPE_WEBHOOK_SECRET")?.trim();
+    if (!secretKey || !webhookSecret) {
+      throw new ServiceUnavailableException("Stripe webhook is not configured");
+    }
+    if (!rawBody?.length) throw new BadRequestException("Missing Stripe raw webhook body");
+    if (!signature) throw new BadRequestException("Missing Stripe signature");
+
+    const stripe = new Stripe(secretKey);
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+    } catch {
+      throw new BadRequestException("Invalid Stripe webhook signature");
+    }
+
+    await this.logWebhook("STRIPE", event.type, true, event);
+    if (![
+      "payment_intent.succeeded",
+      "payment_intent.payment_failed",
+      "payment_intent.canceled",
+    ].includes(event.type)) {
+      return { ok: true, ignored: true };
+    }
+
+    const intent = event.data.object as Stripe.PaymentIntent;
+    const transactionRef = intent.metadata?.transactionRef;
+    if (!transactionRef) return { ok: true, ignored: true };
+
+    const donation = await this.prisma.donation.findUnique({
+      where: { transactionRef },
+      select: {
+        id: true,
+        amount: true,
+        paymentProvider: true,
+        providerTransactionId: true,
+      },
+    });
+    if (!donation) return { ok: true, ignored: true };
+    if (
+      donation.paymentProvider !== PaymentProvider.STRIPE
+      || donation.providerTransactionId !== intent.id
+    ) {
+      throw new BadRequestException("Stripe payment does not match this donation");
+    }
+
+    if (event.type === "payment_intent.succeeded") {
+      if (intent.currency.toLowerCase() !== "thb" || intent.amount_received !== donation.amount * 100) {
+        throw new BadRequestException("Stripe payment amount or currency does not match");
+      }
+      return this.finalizePaidDonation(transactionRef);
+    }
+
+    await this.prisma.donation.updateMany({
+      where: { id: donation.id, paymentStatus: "PENDING" },
+      data: { paymentStatus: "FAILED" },
+    });
+    return { ok: true, status: "FAILED" };
   }
 
   async verifySlip(transactionRef: string, slip?: SlipFile) {

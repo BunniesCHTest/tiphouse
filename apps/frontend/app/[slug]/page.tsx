@@ -24,6 +24,7 @@ type PageData = {
 type QrState = {
   qrDataUrl: string;
   qrDisplayName: string;
+  paymentProvider: "STRIPE" | "PROMPTPAY";
   transactionRef: string;
   amount: number;
   createdAt: string;
@@ -125,6 +126,42 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     return () => window.clearInterval(timer);
   }, [qr, step]);
 
+  useEffect(() => {
+    if (step !== "qr" || !qr || qr.paymentProvider !== "STRIPE") return;
+    let active = true;
+    let completing = false;
+    const checkStatus = async () => {
+      if (completing) return;
+      try {
+        const { data } = await api.get(`/donations/status/${encodeURIComponent(qr.transactionRef)}`);
+        if (!active) return;
+        if (data.status === "PAID") {
+          completing = true;
+          setStep("verifying");
+          window.setTimeout(() => {
+            setStep("success");
+          }, 700);
+          return;
+        }
+        if (data.status === "FAILED") {
+          setPaymentStatusMessage(t(
+            "การชำระเงินไม่สำเร็จ กรุณายกเลิกรายการและลองใหม่",
+            "Payment failed. Cancel this payment and try again.",
+          ));
+        }
+        if (data.status === "EXPIRED") setExpiredModal(true);
+      } catch {
+        // A temporary polling failure must not cancel an active payment.
+      }
+    };
+    void checkStatus();
+    const timer = window.setInterval(checkStatus, 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [qr, step, t]);
+
   const amountNumber = Number(formState.amount || 0);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
   const amountTooHigh = Boolean(formState.amount && amountNumber > 20000);
@@ -158,7 +195,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         message: formState.message.trim(),
         amount: amountNumber,
         anonymous,
-        provider: "PROMPTPAY",
+        provider: "STRIPE",
       });
       if (Number(data.amount) !== amountNumber || !data.transactionRef) {
         throw new Error("Donation transaction does not match the requested amount");
@@ -166,6 +203,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setQr({
         qrDataUrl: data.qrDataUrl,
         qrDisplayName: data.qrDisplayName ?? page.donationAccountName ?? "TipHouse Donate",
+        paymentProvider: data.paymentProvider === "STRIPE" ? "STRIPE" : "PROMPTPAY",
         transactionRef: data.transactionRef,
         amount: Number(data.amount),
         createdAt: data.createdAt,
@@ -416,8 +454,12 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           <div className="phone-frame">
             <aside className="phone-screen grid gap-4 p-5 text-center">
               <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-left text-ink">
-                <h2 className="text-3xl font-black">ชำระเงินด้วย QR</h2>
-                <p className="mt-3 font-semibold opacity-80">หลังชำระเงิน แนบสลิปเพื่อให้ระบบตรวจสอบก่อนส่ง Alert</p>
+                <h2 className="text-3xl font-black">{t("ชำระเงินด้วย QR", "Pay with QR")}</h2>
+                <p className="mt-3 font-semibold opacity-80">
+                  {qr.paymentProvider === "STRIPE"
+                    ? t("ระบบจะตรวจสอบการชำระเงินอัตโนมัติก่อนส่ง Alert", "Payment is confirmed automatically before the alert is sent.")
+                    : t("หลังชำระเงิน แนบสลิปเพื่อให้ระบบตรวจสอบก่อนส่ง Alert", "Upload the slip after payment so it can be verified before the alert is sent.")}
+                </p>
               </div>
               <section className="draft-panel">
                 <p className="font-black">ยอดชำระ</p>
@@ -440,6 +482,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   ))}
                 </div>
               </section>
+              {qr.paymentProvider === "STRIPE" ? (
+                <section className="draft-panel grid gap-2 text-left">
+                  <p className="font-black text-mint">{t("กำลังรอผลการชำระเงินอัตโนมัติ", "Waiting for automatic payment confirmation")}</p>
+                  <p className="text-sm text-white/55">{t(
+                    "ไม่ต้องแนบสลิป ระบบจะยืนยันผ่าน Stripe และส่ง Alert หลังได้รับ webhook ที่ถูกต้อง",
+                    "No slip upload is required. Stripe will confirm the payment and the alert will be sent after a valid webhook is received.",
+                  )}</p>
+                </section>
+              ) : (
               <section className="draft-panel grid gap-3 text-left">
                 <label className="font-black">
                   แนบสลิปหลังชำระเงิน
@@ -462,12 +513,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 <p className="text-sm text-white/55">รองรับ PNG, JPG และ WEBP ขนาดไม่เกิน 5MB</p>
                 {slipFile && <p className="truncate font-bold text-mint">เลือกแล้ว: {slipFile.name}</p>}
               </section>
+              )}
               <p className="break-all text-xs text-white/55">Ref: {qr.transactionRef}</p>
               {paymentStatusMessage && <p className="rounded-xl border border-sky/30 bg-sky/10 p-3 text-sm text-white/80">{paymentStatusMessage}</p>}
               <div className="grid gap-3">
+                {qr.paymentProvider !== "STRIPE" && (
                 <button className="btn btn-primary disabled:cursor-wait disabled:opacity-40" type="button" onClick={completePaymentCheck} disabled={!slipFile || checkingPayment || remainingSeconds <= 0}>
                   {checkingPayment ? t("กำลังตรวจสอบ...", "Checking...") : t("ตรวจสอบสลิป", "Verify Slip")}
                 </button>
+                )}
                 <button className="btn" type="button" onClick={resetFlow}>ยกเลิก QR code</button>
               </div>
             </aside>

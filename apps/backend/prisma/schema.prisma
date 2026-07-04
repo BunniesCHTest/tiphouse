@@ -127,6 +127,7 @@ model Donation {
   paymentStatus   DonationStatus  @default(PENDING)
   paymentProvider PaymentProvider
   transactionRef  String?         @unique
+  providerTransactionId String?   @unique
   qrPayload       String?
   expiresAt       DateTime?
   verifiedAt      DateTime?

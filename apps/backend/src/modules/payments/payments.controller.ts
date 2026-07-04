@@ -1,4 +1,5 @@
-import { Body, Controller, Headers, Param, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Headers, Param, Post, RawBodyRequest, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Request } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { PaymentsService } from "./payments.service";
 
@@ -14,6 +15,14 @@ export class PaymentsController {
   @Post("webhook/gbprimepay")
   gbPrimePayWebhook(@Body() payload: unknown, @Headers("x-gb-signature") signature?: string) {
     return this.payments.handleGbPrimePayWebhook(payload, signature);
+  }
+
+  @Post("webhook/stripe")
+  stripeWebhook(
+    @Req() request: RawBodyRequest<Request>,
+    @Headers("stripe-signature") signature?: string,
+  ) {
+    return this.payments.handleStripeWebhook(request.rawBody, signature);
   }
 
   @Post("slip/:ref/verify")
