@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DonationStatus, PaymentProvider, Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
@@ -10,6 +10,8 @@ import { createFixedAmountThaiQr } from "./thai-qr";
 
 @Injectable()
 export class DonationsService {
+  private readonly logger = new Logger(DonationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -201,6 +203,19 @@ export class DonationsService {
           data: { paymentStatus: DonationStatus.FAILED },
         });
         if (error instanceof ServiceUnavailableException) throw error;
+        const stripeError = error as { type?: string; code?: string; message?: string };
+        this.logger.error(
+          `Stripe PromptPay creation failed (${stripeError.type ?? "unknown"}/${stripeError.code ?? "unknown"}): ${stripeError.message ?? "unknown error"}`,
+        );
+        if (stripeError.type === "StripeAuthenticationError") {
+          throw new ServiceUnavailableException("Stripe Secret Key ไม่ถูกต้องหรือหมดอายุ");
+        }
+        if (stripeError.type === "StripePermissionError") {
+          throw new ServiceUnavailableException("บัญชี Stripe ยังไม่ได้รับสิทธิ์ใช้งาน PromptPay");
+        }
+        if (stripeError.type === "StripeInvalidRequestError") {
+          throw new ServiceUnavailableException(`Stripe ไม่สามารถสร้าง PromptPay ได้: ${stripeError.message ?? stripeError.code ?? "Invalid request"}`);
+        }
         throw new ServiceUnavailableException("Unable to create Stripe PromptPay payment");
       }
     }

@@ -17,6 +17,7 @@ type AlertPayload = {
   message: string;
   anonymous: boolean;
   createdAt?: string;
+  testMode?: boolean;
 };
 
 type DeliveryOptions = {
@@ -56,12 +57,6 @@ export class AlertDeliveryService {
 
     this.overlay.emitPaidDonation(overlay.streamerKey, {
       ...payload,
-      settings: {
-        theme: overlay.theme,
-        animation: overlay.animation,
-        soundUrl: overlay.soundUrl,
-        ttsEnabled: overlay.ttsEnabled,
-      },
     });
     return {
       ok: true,
@@ -85,7 +80,6 @@ export class AlertDeliveryService {
         amount: String(payload.amount),
         currency: "THB",
         message: payload.message.slice(0, 254),
-        created_at: payload.createdAt ?? new Date().toISOString(),
         skip_alert: skipAlert ? "yes" : "no",
       });
       const response = await fetch("https://streamlabs.com/api/v2.0/donations", {

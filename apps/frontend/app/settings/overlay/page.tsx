@@ -443,7 +443,7 @@ export default function OverlaySettingsPage() {
       if (data.provider === "streamlabs") {
         setNotice("ส่ง Alert ทดสอบไปยัง Streamlabs แล้ว");
       } else if (data.fallbackReason) {
-        setNotice(`ส่งทดสอบ Overlay ของ TipHouse แล้ว (Streamlabs ใช้งานไม่ได้: ${data.fallbackReason})`);
+        setNotice("ส่งทดสอบ Overlay ของ TipHouse แล้ว");
       } else {
         setNotice("ส่งทดสอบ Overlay ของ TipHouse แล้ว");
       }

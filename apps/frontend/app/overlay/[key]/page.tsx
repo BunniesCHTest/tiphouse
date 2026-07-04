@@ -14,6 +14,7 @@ type AlertPayload = {
   amount: number;
   message: string;
   anonymous?: boolean;
+  testMode?: boolean;
   settings?: unknown;
 };
 
@@ -73,10 +74,10 @@ function normalizeSettings(data: any): OverlaySettings {
     ttsEnabled: data?.ttsEnabled ?? true,
     ttsVoice: data?.theme?.ttsVoice ?? "female",
     soundPreset: data?.theme?.soundPreset ?? "chime",
-    alertImageUrl: data?.theme?.alertImageUrl,
-    widgetHtml: data?.theme?.widgetHtml,
-    widgetCss: data?.theme?.widgetCss,
-    widgetJs: data?.theme?.widgetJs,
+    alertImageUrl: data?.theme?.alertImageUrl ?? data?.alertImageUrl,
+    widgetHtml: data?.theme?.widgetHtml ?? data?.widgetHtml,
+    widgetCss: data?.theme?.widgetCss ?? data?.widgetCss,
+    widgetJs: data?.theme?.widgetJs ?? data?.widgetJs,
     donateGoal: {
       ...(data?.theme?.donateGoal ?? {}),
       currentAmount: data?.donationGoal?.currentAmount ?? data?.theme?.donateGoal?.currentAmount ?? 0,
@@ -400,9 +401,14 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
     while (queueRef.current.length) {
       const payload = queueRef.current.shift()!;
       const current = settingsRef.current;
+      const durationSeconds = payload.testMode
+        ? Math.min(current.durationSeconds ?? 7, 5)
+        : current.durationSeconds ?? 7;
       setAlert(payload);
-      await playSoundThenTts(current, payload);
-      await wait((current.durationSeconds ?? 7) * 1000);
+      await Promise.all([
+        playSoundThenTts(current, payload),
+        wait(durationSeconds * 1000),
+      ]);
       setAlert(null);
       await wait(350);
     }
