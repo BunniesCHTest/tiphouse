@@ -110,6 +110,7 @@ export class DonationsService {
     const donations = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
     const totals = new Map<string, { donorName: string; amount: number; count: number; anonymous: boolean; source: string }>();
     for (const item of donations) {
+      if (this.isTipHouseTestDonation(item)) continue;
       const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");
       const amount = Number(item.amount ?? item.formatted_amount ?? 0);
       if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -159,7 +160,13 @@ export class DonationsService {
           amount: donation.amount * 100,
           currency: "thb",
           payment_method_types: ["promptpay"],
-          payment_method_data: { type: "promptpay" },
+          payment_method_data: {
+            type: "promptpay",
+            billing_details: {
+              email: dto.donorEmail.trim().toLowerCase(),
+              name: dto.anonymous ? "Anonymous" : dto.donorName,
+            },
+          },
           confirm: true,
           description: `TipHouse donation to ${page.displayName}`,
           metadata: {
@@ -387,7 +394,7 @@ export class DonationsService {
     if (!response.ok) return [];
     const body = await response.json() as any;
     const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
-    return rows.map((item: any) => {
+    return rows.filter((item: any) => !this.isTipHouseTestDonation(item)).map((item: any) => {
       const amount = Number(item.amount ?? item.formatted_amount ?? 0);
       return {
         id: String(item.donation_id ?? item.id ?? item.transaction_id ?? `${item.created_at ?? Date.now()}-${item.name ?? item.from ?? "tip"}`),
@@ -398,5 +405,9 @@ export class DonationsService {
         source: "streamlabs",
       };
     }).filter((item: any) => item.amount > 0);
+  }
+
+  private isTipHouseTestDonation(item: any) {
+    return String(item?.identifier ?? "").startsWith("tiphouse-test");
   }
 }

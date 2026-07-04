@@ -47,6 +47,7 @@ export function clearSession(scope: SessionScope = "user") {
   localStorage.removeItem(key(scope, "role"));
   localStorage.removeItem(key(scope, "account_status"));
   localStorage.removeItem(key(scope, "creator_setup_completed"));
+  if (scope === "user") localStorage.removeItem("tiphouse_last_activity");
   notifySessionChanged(scope);
 }
 

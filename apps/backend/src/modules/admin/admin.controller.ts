@@ -350,7 +350,7 @@ export class AdminController {
       if (!response.ok) return [];
       const body = await response.json() as any;
       const items = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
-      return items.map((item: any) => {
+      return items.filter((item: any) => !String(item?.identifier ?? "").startsWith("tiphouse-test")).map((item: any) => {
         const externalId = String(item.donation_id ?? item.id ?? item.transaction_id ?? item.identifier ?? randomUUID());
         const amount = Number(item.amount ?? item.formatted_amount ?? 0);
         const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");

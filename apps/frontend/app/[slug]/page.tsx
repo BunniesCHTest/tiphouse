@@ -86,7 +86,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [remainingSeconds, setRemainingSeconds] = useState(600);
   const [expiredModal, setExpiredModal] = useState(false);
   const [step, setStep] = useState<DonateStep>("form");
-  const [formState, setFormState] = useState({ donorName: "", message: "", amount: "", anonymous: false });
+  const [formState, setFormState] = useState({ donorName: "", donorEmail: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
 
   useEffect(() => {
@@ -169,7 +169,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const messageTooLong = formState.message.length > 250;
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
-    return Boolean(page && hasDonorName && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount && amountNumber <= 20000);
+    const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.donorEmail.trim());
+    return Boolean(page && hasDonorName && hasValidEmail && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount && amountNumber <= 20000);
   }, [amountNumber, blockedMessage, blockedName, formState, messageTooLong, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
@@ -190,6 +191,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       const { data } = await api.post("/donate", {
         pageSlug: page.slug,
         donorName: donorName.slice(0, MAX_DONOR_NAME_LENGTH),
+        donorEmail: formState.donorEmail.trim().toLowerCase(),
         message: formState.message.trim(),
         amount: amountNumber,
         anonymous,
@@ -373,6 +375,23 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
                   แสดงเป็น Anonymous
                 </button>
+                <label>
+                  {t("อีเมลผู้ชำระเงิน", "Payer Email")}
+                  <input
+                    className="input mt-2"
+                    name="donorEmail"
+                    type="email"
+                    maxLength={254}
+                    value={formState.donorEmail}
+                    onChange={(event) => setFormState({ ...formState, donorEmail: event.target.value.slice(0, 254) })}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                    required
+                  />
+                  <span className="mt-2 block text-sm text-white/60">
+                    {t("Stripe ใช้อีเมลนี้เพื่อยืนยันการชำระเงินและติดต่อกรณีคืนเงิน", "Stripe uses this email for payment confirmation and refund contact.")}
+                  </span>
+                </label>
               </section>
               <section className="draft-panel">
                 <label>{t("ข้อความถึงสตรีมเมอร์", "Message to Streamer")}<textarea className="input mt-2 min-h-28" name="message" maxLength={250} value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value.slice(0, 250) })} required /></label>
@@ -396,6 +415,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 {[
                   [t("ส่งถึง", "To"), page.displayName],
                   [t("ชื่อที่แสดง", "Display Name"), displayDonorName],
+                  [t("อีเมลผู้ชำระเงิน", "Payer Email"), formState.donorEmail],
                   [t("ข้อความ", "Message"), formState.message],
                   [t("ยอดโดเนท", "Donation"), `฿${amountNumber.toLocaleString("th-TH")}`],
                 ].map(([label, value]) => (

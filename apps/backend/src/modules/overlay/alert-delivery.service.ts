@@ -44,11 +44,13 @@ export class AlertDeliveryService {
     const streamlabs = this.streamlabsSettings(overlay.theme);
     let streamlabsDelivery: StreamlabsDelivery | undefined;
     if (streamlabs?.connected && streamlabs.accessToken && (options.recordStreamlabsHistory || streamlabs.alertBoxEnabled)) {
-      const delivery = await this.deliverToStreamlabs(
-        streamlabs.accessToken,
-        payload,
-        !streamlabs.alertBoxEnabled,
-      );
+      const delivery = payload.testMode && streamlabs.alertBoxEnabled
+        ? await this.deliverTestAlertToStreamlabs(streamlabs.accessToken, payload)
+        : await this.deliverToStreamlabs(
+          streamlabs.accessToken,
+          payload,
+          !streamlabs.alertBoxEnabled,
+        );
       streamlabsDelivery = delivery;
       if (streamlabs.alertBoxEnabled && delivery.ok) {
         return delivery;
@@ -66,6 +68,41 @@ export class AlertDeliveryService {
         ? streamlabsDelivery?.reason ?? "Streamlabs is not connected"
         : undefined,
     };
+  }
+
+  private async deliverTestAlertToStreamlabs(accessToken: string, payload: AlertPayload): Promise<StreamlabsDelivery> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const body = new URLSearchParams({
+        type: "donation",
+        message: `${payload.donorName} donated \u0e3f${payload.amount}`,
+        user_message: payload.message.slice(0, 254),
+        duration: "5000",
+      });
+      const response = await fetch("https://streamlabs.com/api/v2.0/alerts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body,
+        signal: controller.signal,
+      });
+      const responseText = (await response.text()).slice(0, 500);
+      return {
+        ok: response.ok,
+        provider: "streamlabs",
+        status: response.status,
+        reason: response.ok ? undefined : `Streamlabs returned HTTP ${response.status}: ${responseText}`,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown";
+      return { ok: false, provider: "streamlabs", reason };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async deliverToStreamlabs(accessToken: string, payload: AlertPayload, skipAlert: boolean): Promise<StreamlabsDelivery> {

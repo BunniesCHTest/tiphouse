@@ -1,5 +1,5 @@
 import { PaymentProvider } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsObject, IsOptional, IsString, Matches, Max, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsEmail, IsEnum, IsInt, IsObject, IsOptional, IsString, Matches, Max, MaxLength, Min } from "class-validator";
 
 export class CreateDonationDto {
   @IsString()
@@ -8,6 +8,10 @@ export class CreateDonationDto {
   @IsString()
   @MaxLength(20)
   donorName!: string;
+
+  @IsEmail()
+  @MaxLength(254)
+  donorEmail!: string;
 
   @IsString()
   @MaxLength(250)

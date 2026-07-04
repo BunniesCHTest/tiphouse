@@ -17,7 +17,7 @@ export default function HomePage() {
 
   return (
     <>
-      <Nav />
+      <Nav publicOnly />
       <main className="mx-auto w-[min(1200px,calc(100%-2rem))] py-12">
         <section className="grid min-h-[calc(100vh-9rem)] items-center gap-10 lg:grid-cols-[1.05fr_.95fr]">
           <div>
