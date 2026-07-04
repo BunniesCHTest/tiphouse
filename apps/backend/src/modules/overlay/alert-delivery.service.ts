@@ -72,13 +72,13 @@ export class AlertDeliveryService {
 
   private async deliverTestAlertToStreamlabs(accessToken: string, payload: AlertPayload): Promise<StreamlabsDelivery> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8_000);
+    const timeout = setTimeout(() => controller.abort(), 3_000);
     try {
       const body = new URLSearchParams({
         type: "donation",
         message: `${payload.donorName} donated \u0e3f${payload.amount}`,
         user_message: payload.message.slice(0, 254),
-        duration: "5000",
+        duration: "3000",
       });
       const response = await fetch("https://streamlabs.com/api/v2.0/alerts", {
         method: "POST",

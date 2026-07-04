@@ -130,9 +130,6 @@ model Donation {
   providerTransactionId String?   @unique
   qrPayload       String?
   expiresAt       DateTime?
-  verifiedAt      DateTime?
-  slipTransactionRef String?      @unique
-  slipVerification Json?
   paidAt          DateTime?
   ipAddress       String?
   userAgent       String?
@@ -176,8 +173,6 @@ model PayoutAccount {
   promptpayId   String?
   receivingQrImageUrl String?
   receivingQrPayload String?
-  slipOkBranchId String?
-  slipOkApiKeyEncrypted String?
   note          String?
   kycStatus     String   @default("PENDING")
   createdAt     DateTime @default(now())

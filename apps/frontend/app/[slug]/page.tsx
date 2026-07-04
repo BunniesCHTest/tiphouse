@@ -489,7 +489,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               <h2 className="text-3xl font-black">กำลังตรวจสอบ</h2>
               <div className="relative grid size-40 place-items-center rounded-full border-2 border-sky/25">
                 <div className="absolute inset-[-2px] animate-spin rounded-full border-4 border-transparent border-t-mint border-r-sky" />
-                <div className="grid size-24 place-items-center rounded-full bg-sky/10 text-sm font-black text-sky">SLIP<br />CHECK</div>
+                <div className="grid size-24 place-items-center rounded-full bg-sky/10 text-sm font-black text-sky">PAYMENT<br />CHECK</div>
               </div>
               <div>
                 <p className="font-black">กำลังตรวจสอบการชำระเงิน</p>

@@ -43,11 +43,6 @@ services:
         sync: false
       - key: PAYMENT_QR_BASE_PAYLOAD
         sync: false
-      - key: CREDENTIAL_ENCRYPTION_KEY
-        sync: false
-      - key: SLIPOK_MOCK_MODE
-        value: "false"
-
   - type: web
     name: tiphouse-frontend
     runtime: docker

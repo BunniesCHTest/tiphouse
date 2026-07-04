@@ -1,8 +1,6 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { encryptSecret } from "../../common/secret-box";
 import { AlertDeliveryService } from "../overlay/alert-delivery.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CompleteCreatorOnboardingDto, UpdateOverlayDto, UpdateProfileDto, UpsertPayoutDto } from "./dto";
@@ -11,7 +9,6 @@ import { createFixedAmountThaiQr, verifyThaiQrPayload } from "../donations/thai-
 @Injectable()
 export class SettingsService {
   constructor(
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly alertDelivery: AlertDeliveryService,
   ) {}
@@ -155,25 +152,11 @@ export class SettingsService {
     // This also verifies that the QR contains a merchant account field and can
     // be converted into a fixed-amount dynamic QR.
     createFixedAmountThaiQr(receivingQrPayload, 10, "TIPHOUSE-CHECK");
-    const current = await this.prisma.payoutAccount.findUnique({
-      where: { userId },
-      select: { slipOkBranchId: true, slipOkApiKeyEncrypted: true },
-    });
-    const slipOkBranchId = dto.slipOkBranchId?.trim() || current?.slipOkBranchId || null;
-    const newApiKey = dto.slipOkApiKey?.trim();
-    const slipOkApiKeyEncrypted = newApiKey
-      ? encryptSecret(newApiKey, this.credentialEncryptionKey())
-      : current?.slipOkApiKeyEncrypted || null;
-    if ((slipOkBranchId || slipOkApiKeyEncrypted) && (!slipOkBranchId || !slipOkApiKeyEncrypted)) {
-      throw new BadRequestException("กรุณาระบุ SlipOK Branch ID และ API Key ให้ครบถ้วน");
-    }
     const data = {
       receivingQrImageUrl: dto.receivingQrImageUrl,
       receivingQrPayload,
       phone: dto.phone?.trim() || null,
       contactEmail: dto.contactEmail?.trim().toLowerCase() || null,
-      slipOkBranchId,
-      slipOkApiKeyEncrypted,
       payoutMethod: "QR_TRANSFER",
     };
     const payout = await this.prisma.payoutAccount.upsert({
@@ -275,22 +258,53 @@ export class SettingsService {
     return JSON.parse(JSON.stringify(next));
   }
 
-  private credentialEncryptionKey() {
-    const configured = this.config.get<string>("CREDENTIAL_ENCRYPTION_KEY")?.trim();
-    if (configured) return configured;
-    const developmentFallback = this.config.get<string>("NODE_ENV") !== "production"
-      ? this.config.get<string>("JWT_ACCESS_SECRET")?.trim()
-      : undefined;
-    if (developmentFallback) return developmentFallback;
-    throw new ServiceUnavailableException("ระบบยังไม่ได้ตั้งค่า CREDENTIAL_ENCRYPTION_KEY");
-  }
-
-  private publicPayout<T extends { slipOkApiKeyEncrypted?: string | null; slipOkBranchId?: string | null } | null>(payout: T) {
+  private publicPayout(payout: any) {
     if (!payout) return null;
-    const { slipOkApiKeyEncrypted, ...publicData } = payout;
+    const {
+      id,
+      userId,
+      accountName,
+      legalName,
+      phone,
+      contactEmail,
+      taxId,
+      address,
+      bankName,
+      branchName,
+      accountType,
+      accountNumber,
+      payoutMethod,
+      promptpayType,
+      promptpayId,
+      receivingQrImageUrl,
+      receivingQrPayload,
+      note,
+      kycStatus,
+      createdAt,
+      updatedAt,
+    } = payout;
     return {
-      ...publicData,
-      slipOkConfigured: Boolean(payout.slipOkBranchId && slipOkApiKeyEncrypted),
+      id,
+      userId,
+      accountName,
+      legalName,
+      phone,
+      contactEmail,
+      taxId,
+      address,
+      bankName,
+      branchName,
+      accountType,
+      accountNumber,
+      payoutMethod,
+      promptpayType,
+      promptpayId,
+      receivingQrImageUrl,
+      receivingQrPayload,
+      note,
+      kycStatus,
+      createdAt,
+      updatedAt,
     };
   }
 }

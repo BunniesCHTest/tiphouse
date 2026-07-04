@@ -23,6 +23,56 @@ export class AdminController {
     if (user.role !== "ADMIN" && user.role !== "ACCOUNTING") throw new ForbiddenException("admin or accounting role required");
   }
 
+  private publicPayout(payout: any) {
+    if (!payout) return null;
+    const {
+      id,
+      userId,
+      accountName,
+      legalName,
+      phone,
+      contactEmail,
+      taxId,
+      address,
+      bankName,
+      branchName,
+      accountType,
+      accountNumber,
+      payoutMethod,
+      promptpayType,
+      promptpayId,
+      receivingQrImageUrl,
+      receivingQrPayload,
+      note,
+      kycStatus,
+      createdAt,
+      updatedAt,
+    } = payout;
+    return {
+      id,
+      userId,
+      accountName,
+      legalName,
+      phone,
+      contactEmail,
+      taxId,
+      address,
+      bankName,
+      branchName,
+      accountType,
+      accountNumber,
+      payoutMethod,
+      promptpayType,
+      promptpayId,
+      receivingQrImageUrl,
+      receivingQrPayload,
+      note,
+      kycStatus,
+      createdAt,
+      updatedAt,
+    };
+  }
+
   private async importOwner() {
     const passwordHash = await argon2.hash(`system-${Date.now()}-${Math.random()}`);
     return this.prisma.user.upsert({
@@ -118,14 +168,9 @@ export class AdminController {
       include: { page: true, payout: true, overlay: true },
     });
     const streamlabs = typeof item.overlay?.theme === "object" && item.overlay?.theme ? (item.overlay.theme as any).streamlabs : undefined;
-    const payout = item.payout ? {
-      ...item.payout,
-      slipOkApiKeyEncrypted: undefined,
-      slipOkConfigured: Boolean(item.payout.slipOkBranchId && item.payout.slipOkApiKeyEncrypted),
-    } : null;
     return {
       ...item,
-      payout,
+      payout: this.publicPayout(item.payout),
       authProvider: streamlabs?.connected ? "Streamlabs" : "Email",
       streamlabsUsername: streamlabs?.username ?? null,
     };
@@ -169,11 +214,7 @@ export class AdminController {
     });
     return {
       ...updated,
-      payout: updated.payout ? {
-        ...updated.payout,
-        slipOkApiKeyEncrypted: undefined,
-        slipOkConfigured: Boolean(updated.payout.slipOkBranchId && updated.payout.slipOkApiKeyEncrypted),
-      } : null,
+      payout: this.publicPayout(updated.payout),
     };
   }
 

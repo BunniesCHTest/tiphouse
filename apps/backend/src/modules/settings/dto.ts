@@ -19,16 +19,6 @@ export class UpsertPayoutDto {
   @IsOptional()
   contactEmail?: string;
 
-  @IsString()
-  @Matches(/^[0-9]{1,20}$/)
-  @IsOptional()
-  slipOkBranchId?: string;
-
-  @IsString()
-  @MinLength(8)
-  @MaxLength(200)
-  @IsOptional()
-  slipOkApiKey?: string;
 }
 
 export class UpdateOverlayDto {

@@ -12,9 +12,6 @@ type ReceivingAccount = {
   receivingQrPayload: string;
   phone: string;
   contactEmail: string;
-  slipOkBranchId: string;
-  slipOkApiKey: string;
-  slipOkConfigured: boolean;
 };
 
 const defaults: ReceivingAccount = {
@@ -22,9 +19,6 @@ const defaults: ReceivingAccount = {
   receivingQrPayload: "",
   phone: "",
   contactEmail: "",
-  slipOkBranchId: "",
-  slipOkApiKey: "",
-  slipOkConfigured: false,
 };
 
 function fileToDataUrl(file: File) {
@@ -73,9 +67,6 @@ export default function BankSettingsPage() {
             receivingQrPayload: response.data.receivingQrPayload ?? "",
             phone: response.data.phone ?? "",
             contactEmail: response.data.contactEmail ?? "",
-            slipOkBranchId: response.data.slipOkBranchId ?? "",
-            slipOkApiKey: "",
-            slipOkConfigured: Boolean(response.data.slipOkConfigured),
           });
         }
       })
@@ -130,16 +121,6 @@ export default function BankSettingsPage() {
       setError("รูปแบบอีเมลติดต่อไม่ถูกต้อง");
       return;
     }
-    const slipOkBranchId = account.slipOkBranchId.trim();
-    const slipOkApiKey = account.slipOkApiKey.trim();
-    if (slipOkBranchId && !/^[0-9]{1,20}$/.test(slipOkBranchId)) {
-      setError("SlipOK Branch ID ต้องเป็นตัวเลขเท่านั้น");
-      return;
-    }
-    if (!account.slipOkConfigured && (!slipOkBranchId || !slipOkApiKey)) {
-      setError("กรุณาระบุ SlipOK Branch ID และ API Key ให้ครบถ้วน");
-      return;
-    }
     setSaving(true);
     try {
       const { data } = await api.patch("/settings/payout", {
@@ -147,17 +128,12 @@ export default function BankSettingsPage() {
         receivingQrPayload: account.receivingQrPayload,
         phone: phone || undefined,
         contactEmail: contactEmail || undefined,
-        slipOkBranchId,
-        slipOkApiKey: slipOkApiKey || undefined,
       }, { headers: authHeaders() });
       setAccount({
         receivingQrImageUrl: data.receivingQrImageUrl ?? account.receivingQrImageUrl,
         receivingQrPayload: data.receivingQrPayload ?? account.receivingQrPayload,
         phone: data.phone ?? "",
         contactEmail: data.contactEmail ?? "",
-        slipOkBranchId: data.slipOkBranchId ?? slipOkBranchId,
-        slipOkApiKey: "",
-        slipOkConfigured: Boolean(data.slipOkConfigured),
       });
       setNotice("บันทึกข้อมูลรับเงินสำเร็จ");
     } catch (cause) {
@@ -232,42 +208,6 @@ export default function BankSettingsPage() {
                 placeholder="creator@example.com"
               />
             </label>
-          </div>
-
-          <div className="grid gap-4 rounded-lg border border-sky/25 bg-sky/5 p-4 sm:grid-cols-2">
-            <label>
-              SlipOK Branch ID
-              <input
-                className="input mt-2"
-                inputMode="numeric"
-                maxLength={20}
-                value={account.slipOkBranchId}
-                onChange={(event) => setAccount({
-                  ...account,
-                  slipOkBranchId: event.target.value.replace(/\D/g, "").slice(0, 20),
-                })}
-                placeholder="ตัวอย่าง 12345"
-                required
-              />
-            </label>
-            <label>
-              SlipOK API Key
-              <input
-                className="input mt-2"
-                type="password"
-                autoComplete="new-password"
-                maxLength={200}
-                value={account.slipOkApiKey}
-                onChange={(event) => setAccount({ ...account, slipOkApiKey: event.target.value })}
-                placeholder={account.slipOkConfigured ? "ตั้งค่าแล้ว - เว้นว่างเพื่อใช้คีย์เดิม" : "กรอก API Key"}
-                required={!account.slipOkConfigured}
-              />
-            </label>
-            <p className="text-sm text-white/60 sm:col-span-2">
-              {account.slipOkConfigured
-                ? "เชื่อมต่อ SlipOK แล้ว API Key ถูกเก็บแบบเข้ารหัสและจะไม่ถูกแสดงกลับมา"
-                : "ข้อมูลชุดนี้ใช้ตรวจสลิปเฉพาะหน้าโดเนทของบัญชีนี้เท่านั้น"}
-            </p>
           </div>
 
           {error && <p className="rounded-lg border border-coral/40 bg-coral/10 p-3 font-bold text-coral">{error}</p>}

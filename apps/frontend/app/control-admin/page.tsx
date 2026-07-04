@@ -20,8 +20,6 @@ type UserRow = {
     phone?: string | null;
     contactEmail?: string | null;
     receivingQrImageUrl?: string | null;
-    slipOkBranchId?: string | null;
-    slipOkConfigured?: boolean;
   } | null;
   page?: { slug: string; displayName: string; handle?: string | null; minAmount?: number; goalAmount?: number } | null;
   _count?: { donations: number; approvals: number };
@@ -839,8 +837,6 @@ export default function AdminPage() {
                       {[
                         ["เบอร์โทรศัพท์", selectedUser.payout.phone],
                         ["อีเมลติดต่อ", selectedUser.payout.contactEmail],
-                        ["SlipOK Branch ID", selectedUser.payout.slipOkBranchId],
-                        ["SlipOK", selectedUser.payout.slipOkConfigured ? "Connected" : "Not configured"],
                       ].map(([label, value]) => (
                       <div key={label} className="rounded-lg border border-white/10 bg-white/5 p-3">
                         <dt className="text-sm text-white/55">{label}</dt>

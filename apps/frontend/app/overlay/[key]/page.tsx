@@ -473,7 +473,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
             exit={{ opacity: 0, y: -30, scale: 0.95 }}
             className="mx-auto grid max-w-3xl place-items-center gap-3 bg-transparent p-5 text-center"
           >
-            <div ref={widgetRef} className="tiphouse-widget">
+            <div ref={widgetRef} className="tiphouse-widget origin-center scale-125">
               <style dangerouslySetInnerHTML={{ __html: customCss }} />
               <div dangerouslySetInnerHTML={{ __html: customHtml }} />
             </div>
