@@ -5,6 +5,7 @@ import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { api } from "@/lib/api";
+import { readOverlayCache, writeOverlayCache } from "@/lib/overlay-cache";
 
 type SoundPreset = "none" | "chime" | "pop" | "bell" | "success";
 
@@ -95,8 +96,7 @@ function positionClass(position?: OverlaySettings["position"]) {
 }
 
 function readLocalSettings(key: string) {
-  const raw = localStorage.getItem(`tiphouse_overlay_settings:${key}`);
-  return raw ? (JSON.parse(raw) as OverlaySettings) : {};
+  return readOverlayCache<OverlaySettings & Record<string, unknown>>(`tiphouse_overlay_settings:${key}`) ?? {};
 }
 
 function wait(ms: number) {
@@ -323,7 +323,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
       const next = normalizeSettings(data);
       settingsRef.current = next;
       setSettings(next);
-      localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
+      writeOverlayCache(`tiphouse_overlay_settings:${key}`, next);
     } catch {
       // Keep current settings if backend is waking up.
     }
@@ -378,7 +378,7 @@ export default function OverlayPage({ params }: { params: Promise<{ key: string 
         const next = normalizeSettings(payload.settings);
         settingsRef.current = next;
         setSettings(next);
-        localStorage.setItem(`tiphouse_overlay_settings:${key}`, JSON.stringify(next));
+        writeOverlayCache(`tiphouse_overlay_settings:${key}`, next);
       } else {
         await loadSettings();
       }

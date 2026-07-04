@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
 import { Nav } from "@/components/Nav";
 import { api, authHeaders } from "@/lib/api";
+import { readOverlayCache, writeOverlayCache } from "@/lib/overlay-cache";
 import { userCacheKey } from "@/lib/session";
 
 type SoundPreset = "none" | "chime" | "pop" | "bell" | "success";
@@ -365,14 +366,14 @@ export default function OverlaySettingsPage() {
       window.history.replaceState({}, "", window.location.pathname);
     }
 
-    const cached = localStorage.getItem(userCacheKey("overlay_settings"));
-    if (cached) setSettings(normalizeOverlay(JSON.parse(cached)));
+    const cached = readOverlayCache<Record<string, unknown>>(userCacheKey("overlay_settings"));
+    if (cached) setSettings(normalizeOverlay(cached));
 
     api.get("/settings/overlay", { headers: authHeaders() }).then((res) => {
       const next = normalizeOverlay(res.data);
       setSettings(next);
-      localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
-      localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
+      writeOverlayCache(userCacheKey("overlay_settings"), next);
+      writeOverlayCache(`tiphouse_overlay_settings:${next.streamerKey}`, next);
     }).catch(() => undefined);
   }, []);
 
@@ -386,8 +387,8 @@ export default function OverlaySettingsPage() {
       const { data } = await api.patch("/settings/overlay", overlayPayload(settings), { headers: authHeaders() });
       const next = normalizeOverlay(data, settings);
       setSettings(next);
-      localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
-      localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
+      writeOverlayCache(userCacheKey("overlay_settings"), next);
+      writeOverlayCache(`tiphouse_overlay_settings:${next.streamerKey}`, next);
       setNotice(THAI_SAVE_OK);
       setSaveStatus({
         type: "success",
@@ -415,8 +416,8 @@ export default function OverlaySettingsPage() {
       }
       setSettings(next);
       localStorage.removeItem(`tiphouse_overlay_settings:${settings.streamerKey}`);
-      localStorage.setItem(userCacheKey("overlay_settings"), JSON.stringify(next));
-      localStorage.setItem(`tiphouse_overlay_settings:${next.streamerKey}`, JSON.stringify(next));
+      writeOverlayCache(userCacheKey("overlay_settings"), next);
+      writeOverlayCache(`tiphouse_overlay_settings:${next.streamerKey}`, next);
       setNotice(THAI_RESET_OK);
     } catch {
       setError(THAI_RESET_ERROR);
@@ -430,7 +431,7 @@ export default function OverlaySettingsPage() {
     }
     const nextAlert = randomTestAlert();
     setPreviewAlert(nextAlert);
-    localStorage.setItem(`tiphouse_overlay_settings:${settings.streamerKey}`, JSON.stringify(settings));
+    writeOverlayCache(`tiphouse_overlay_settings:${settings.streamerKey}`, settings);
     try {
       const { data } = await api.post("/settings/overlay/test", {
         ...overlayPayload(settings),
