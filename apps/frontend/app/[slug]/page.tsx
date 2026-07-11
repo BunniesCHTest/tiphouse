@@ -251,10 +251,6 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     link.click();
   }
 
-  function scrollToRank() {
-    document.getElementById("top-donator-rank")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   if (!page && error) return <main className="grid min-h-screen place-items-center p-6 text-center text-coral">{error}</main>;
 
   if (!page) {
@@ -520,15 +516,28 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               <h3 className="text-2xl font-black">ระบบยืนยันรายการแล้ว</h3>
               <div className="draft-panel grid gap-3 text-left">
                 <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
+                  <span>ชื่อผู้โดเนท</span>
+                  <strong className="text-right">{displayDonorName}</strong>
+                </div>
+                {formState.message.trim() && (
+                  <div className="grid gap-1 border-b border-dashed border-white/10 pb-3">
+                    <span>ข้อความโดเนท</span>
+                    <strong className="break-words text-right">{formState.message.trim()}</strong>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
                   <span>ยอดโดเนท</span>
                   <strong>฿{amountNumber.toLocaleString("th-TH")}</strong>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
                   <span>สถานะ</span>
-                  <strong className="badge">Completed</strong>
+                  <strong className="badge">สำเร็จ</strong>
+                </div>
+                <div className="grid gap-1">
+                  <span>เลขที่อ้างอิง</span>
+                  <strong className="break-all text-right text-mint">{qr?.transactionRef ?? "-"}</strong>
                 </div>
               </div>
-              <button className="btn btn-primary" type="button" onClick={scrollToRank}>ดูอันดับผู้สนับสนุน</button>
               <button className="btn" type="button" onClick={resetFlow}>กลับไปหน้าโดเนท</button>
             </section>
           </div>
