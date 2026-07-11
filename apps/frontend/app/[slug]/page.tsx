@@ -44,6 +44,7 @@ const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const rankMedals = ["🥇", "🥈", "🥉"];
 const quickAmounts = [50, 100, 300, 500, 1000];
 const MAX_DONOR_NAME_LENGTH = 20;
+const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
@@ -91,7 +92,9 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
   useEffect(() => {
     const storedDonorName = decodeURIComponent(cookieValue("tiphouse_donor_name"));
+    const storedDonorEmail = localStorage.getItem(DONOR_EMAIL_STORAGE_KEY) ?? "";
     if (storedDonorName) setFormState((current) => current.anonymous || current.donorName ? current : { ...current, donorName: storedDonorName });
+    if (storedDonorEmail) setFormState((current) => current.donorEmail ? current : { ...current, donorEmail: storedDonorEmail });
 
     api.get(`/page/${slug}`).then((res) => {
       setPage(res.data);
@@ -179,6 +182,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     if (!formState.anonymous) {
       document.cookie = `tiphouse_donor_name=${encodeURIComponent(formState.donorName.trim())};path=/;max-age=31536000;samesite=lax`;
     }
+    localStorage.setItem(DONOR_EMAIL_STORAGE_KEY, formState.donorEmail.trim().toLowerCase());
     setError("");
     setStep("summary");
   }
