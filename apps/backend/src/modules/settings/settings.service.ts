@@ -209,10 +209,17 @@ export class SettingsService {
 
   async testOverlay(userId: string, dto?: UpdateOverlayDto) {
     await this.ensureApproved(userId);
-    if (dto && Object.keys(dto).length) {
-      await this.updateOverlay(userId, dto);
-    }
-    const overlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
+    const currentOverlay = await this.prisma.overlaySetting.findUniqueOrThrow({ where: { userId } });
+    const overlay = dto && Object.keys(dto).length
+      ? {
+          ...currentOverlay,
+          streamerKey: dto.streamerKey ?? currentOverlay.streamerKey,
+          soundUrl: dto.soundUrl ?? currentOverlay.soundUrl,
+          ttsEnabled: dto.ttsEnabled ?? currentOverlay.ttsEnabled,
+          theme: this.mergeOverlayTheme(currentOverlay.theme, dto.theme) ?? currentOverlay.theme,
+          animation: dto.animation ?? currentOverlay.animation,
+        }
+      : currentOverlay;
     const delivery = await this.alertDelivery.deliver(overlay, {
       donorName: dto?.testDonorName ?? "Test Overlay",
       amount: Number(dto?.testAmount ?? 100),
@@ -242,7 +249,7 @@ export class SettingsService {
   private mergeOverlayTheme(currentTheme: unknown, nextTheme?: Record<string, unknown>) {
     if (!nextTheme) return undefined;
     const current = typeof currentTheme === "object" && currentTheme ? currentTheme as Record<string, any> : {};
-    const next = { ...nextTheme } as Record<string, any>;
+    const next = { ...current, ...nextTheme } as Record<string, any>;
     if (current.streamlabs || next.streamlabs) {
       next.streamlabs = {
         ...(current.streamlabs ?? {}),

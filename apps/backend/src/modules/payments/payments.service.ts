@@ -121,7 +121,7 @@ export class PaymentsService {
         message: donation.message,
         anonymous: donation.anonymous,
         createdAt: donation.paidAt?.toISOString() ?? new Date().toISOString(),
-      }, { recordStreamlabsHistory: true })
+      }, { recordStreamlabsHistory: true, saveStreamlabsHistoryAsync: true })
       : { ok: false, provider: "none", reason: "Creator has no overlay configuration" };
     return { ok: true, donationId: donation.id, alert: delivery };
   }

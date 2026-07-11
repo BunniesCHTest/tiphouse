@@ -82,6 +82,16 @@ function formatDateTime(row: HistoryRow) {
   return date ? date.toLocaleString("th-TH") : "-";
 }
 
+function sameDonationContent(a: HistoryRow, b: HistoryRow) {
+  const aDate = rowDate(a)?.getTime();
+  const bDate = rowDate(b)?.getTime();
+  const closeInTime = aDate && bDate ? Math.abs(aDate - bDate) <= 10 * 60 * 1000 : true;
+  return closeInTime
+    && a.amount === b.amount
+    && a.tipper.trim().toLowerCase() === b.tipper.trim().toLowerCase()
+    && (a.message ?? "").trim() === (b.message ?? "").trim();
+}
+
 function groupKey(date: Date, viewBy: ViewBy) {
   if (viewBy === "year") return `${date.getFullYear()}`;
   if (viewBy === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -157,7 +167,8 @@ export default function DashboardPage() {
         source: "tiphouse" as const,
         anonymous: item.anonymous,
       }));
-    return [...streamlabsRows, ...localRows].sort((a, b) => (rowDate(b)?.getTime() ?? 0) - (rowDate(a)?.getTime() ?? 0));
+    const externalStreamlabsRows = streamlabsRows.filter((row) => !localRows.some((local) => sameDonationContent(row, local)));
+    return [...externalStreamlabsRows, ...localRows].sort((a, b) => (rowDate(b)?.getTime() ?? 0) - (rowDate(a)?.getTime() ?? 0));
   }, [donations, streamlabsTips]);
 
   const filteredRows = useMemo(() => {

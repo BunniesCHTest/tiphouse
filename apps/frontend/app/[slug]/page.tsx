@@ -393,7 +393,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                     required
                   />
                   <span className="mt-2 block text-sm text-white/60">
-                    {t("Stripe ใช้อีเมลนี้เพื่อยืนยันการชำระเงินและติดต่อกรณีคืนเงิน", "Stripe uses this email for payment confirmation and refund contact.")}
+                    {t("อีเมลใช้เพื่อยืนยันการชำระเงินและติดต่อกรณีคืนเงิน", "Email is used for payment confirmation and refund contact.")}
                   </span>
                 </label>
               </section>

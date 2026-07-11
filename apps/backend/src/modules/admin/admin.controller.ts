@@ -288,7 +288,8 @@ export class AdminController {
       include: { overlay: true, page: true },
       take: 5,
     });
-    const streamlabsRows = (await Promise.all(creators.map((creator) => this.streamlabsTransactions(creator)))).flat();
+    const streamlabsRows = (await Promise.all(creators.map((creator) => this.streamlabsTransactions(creator)))).flat()
+      .filter((streamlabsRow) => !localRows.some((localRow) => this.sameDonationRow(streamlabsRow, localRow)));
     return [...localRows, ...streamlabsRows]
       .sort((a, b) => new Date(b.paidAt ?? b.createdAt).getTime() - new Date(a.paidAt ?? a.createdAt).getTime())
       .slice(0, 500);
@@ -391,7 +392,7 @@ export class AdminController {
       if (!response.ok) return [];
       const body = await response.json() as any;
       const items = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
-      return items.filter((item: any) => !String(item?.identifier ?? "").startsWith("tiphouse-test")).map((item: any) => {
+      return items.filter((item: any) => !String(item?.identifier ?? "").startsWith("tiphouse-")).map((item: any) => {
         const externalId = String(item.donation_id ?? item.id ?? item.transaction_id ?? item.identifier ?? randomUUID());
         const amount = Number(item.amount ?? item.formatted_amount ?? 0);
         const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");
@@ -421,6 +422,18 @@ export class AdminController {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private sameDonationRow(a: any, b: any) {
+    const aTime = new Date(a.paidAt ?? a.createdAt).getTime();
+    const bTime = new Date(b.paidAt ?? b.createdAt).getTime();
+    const closeInTime = Number.isFinite(aTime) && Number.isFinite(bTime)
+      ? Math.abs(aTime - bTime) <= 10 * 60 * 1000
+      : true;
+    return closeInTime
+      && Number(a.amount) === Number(b.amount)
+      && String(a.donorName ?? "").trim().toLowerCase() === String(b.donorName ?? "").trim().toLowerCase()
+      && String(a.message ?? "").trim() === String(b.message ?? "").trim();
   }
 
   @Delete("transactions/:id")

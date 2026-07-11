@@ -279,16 +279,21 @@ function fillTemplate(value: string, alert: TestAlert) {
   return Object.entries(replacements).reduce((result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement), value);
 }
 
-function overlayPayload(settings: OverlaySettings) {
+function overlayPayload(settings: OverlaySettings, options: { includeMedia?: boolean } = {}) {
+  const mediaFields = options.includeMedia
+    ? {
+        alertImageUrl: settings.alertImageUrl,
+        customSoundUrl: settings.customSoundUrl,
+      }
+    : {};
   return {
-    soundUrl: settings.customSoundUrl || "",
+    ...(options.includeMedia ? { soundUrl: settings.customSoundUrl || "" } : {}),
     streamerKey: settings.streamerKey,
     ttsEnabled: settings.ttsEnabled,
     theme: {
       ttsVoice: settings.ttsVoice,
       soundPreset: settings.soundPreset,
-      alertImageUrl: settings.alertImageUrl,
-      customSoundUrl: settings.customSoundUrl,
+      ...mediaFields,
       streamlabs: {
         connected: settings.streamlabsConnected,
         alertBoxEnabled: settings.streamlabsAlertBoxEnabled,
@@ -352,6 +357,8 @@ export default function OverlaySettingsPage() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<OverlaySettings>(defaultSettings);
+  const [alertImageDirty, setAlertImageDirty] = useState(false);
+  const [soundDirty, setSoundDirty] = useState(false);
   const [previewAlert, setPreviewAlert] = useState<TestAlert>(randomTestAlert);
   const overlayUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? "https://yourdomain.com"}/overlay/${settings.streamerKey || "loading"}`;
   const previewUrl = `/overlay/${settings.streamerKey}?preview=1&donor=${encodeURIComponent(previewAlert.donorName)}&amount=${previewAlert.amount}&message=${encodeURIComponent(previewAlert.message)}`;
@@ -384,9 +391,11 @@ export default function OverlaySettingsPage() {
     setSaveStatus(null);
     setSaving(true);
     try {
-      const { data } = await api.patch("/settings/overlay", overlayPayload(settings), { headers: authHeaders() });
+      const { data } = await api.patch("/settings/overlay", overlayPayload(settings, { includeMedia: alertImageDirty || soundDirty }), { headers: authHeaders() });
       const next = normalizeOverlay(data, settings);
       setSettings(next);
+      setAlertImageDirty(false);
+      setSoundDirty(false);
       writeOverlayCache(userCacheKey("overlay_settings"), next);
       writeOverlayCache(`tiphouse_overlay_settings:${next.streamerKey}`, next);
       setNotice(THAI_SAVE_OK);
@@ -434,7 +443,7 @@ export default function OverlaySettingsPage() {
     writeOverlayCache(`tiphouse_overlay_settings:${settings.streamerKey}`, settings);
     try {
       const { data } = await api.post("/settings/overlay/test", {
-        ...overlayPayload(settings),
+        ...overlayPayload(settings, { includeMedia: alertImageDirty || soundDirty }),
         testDonorName: nextAlert.donorName,
         testAmount: String(nextAlert.amount),
         testMessage: nextAlert.message,
@@ -464,6 +473,7 @@ export default function OverlaySettingsPage() {
     try {
       const dataUrl = await fileToDataUrl(file);
       setSettings((current) => ({ ...current, alertImageUrl: dataUrl }));
+      setAlertImageDirty(true);
     } catch {
       setSaveStatus({ type: "error", title: "อ่านไฟล์รูปไม่สำเร็จ", message: "กรุณาเลือกไฟล์รูปใหม่อีกครั้ง" });
     }
@@ -478,6 +488,7 @@ export default function OverlaySettingsPage() {
     try {
       const dataUrl = await fileToDataUrl(file);
       setSettings((current) => ({ ...current, customSoundUrl: dataUrl, soundPreset: "none" }));
+      setSoundDirty(true);
     } catch {
       setSaveStatus({ type: "error", title: "อ่านไฟล์เสียงไม่สำเร็จ", message: "กรุณาเลือกไฟล์เสียงใหม่อีกครั้ง" });
     }
@@ -514,11 +525,11 @@ export default function OverlaySettingsPage() {
             <label>ระยะเวลาแสดงผล Overlay (วินาที)<input className="input mt-2" name="durationSeconds" type="number" min="3" max="30" value={settings.durationSeconds} onChange={(event) => setSettings({ ...settings, durationSeconds: Number(event.target.value) })} required /></label>
             <label>รูปภาพ Alert Overlay<input className="input mt-2" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => onAlertImageSelected(event.target.files?.[0])} /></label>
             <p className="text-sm text-white/55">แนะนำรูปโปร่งใส 512x512 px หรือ GIF สี่เหลี่ยม เพื่อแสดงเหนือชื่อผู้โดเนท</p>
-            {settings.alertImageUrl && <button className="btn" type="button" onClick={() => setSettings({ ...settings, alertImageUrl: "" })}>ลบรูป Alert</button>}
+            {settings.alertImageUrl && <button className="btn" type="button" onClick={() => { setSettings({ ...settings, alertImageUrl: "" }); setAlertImageDirty(true); }}>ลบรูป Alert</button>}
             <label>เสียงแจ้งเตือน<select className="input mt-2" name="soundPreset" value={settings.soundPreset} onChange={(event) => setSettings({ ...settings, soundPreset: event.target.value as SoundPreset })}>{soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label>แนบไฟล์เสียง Alert<input className="input mt-2" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp3" onChange={(event) => onSoundSelected(event.target.files?.[0])} /></label>
             <p className="text-sm text-white/55">{settings.customSoundUrl ? "ใช้ไฟล์เสียงที่แนบไว้ ระบบจะเล่นก่อน TTS" : "ถ้าไม่แนบไฟล์ ระบบจะใช้เสียงจาก Dropdown"}</p>
-            {settings.customSoundUrl && <button className="btn" type="button" onClick={() => setSettings({ ...settings, customSoundUrl: "" })}>ลบไฟล์เสียง</button>}
+            {settings.customSoundUrl && <button className="btn" type="button" onClick={() => { setSettings({ ...settings, customSoundUrl: "" }); setSoundDirty(true); }}>ลบไฟล์เสียง</button>}
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
             <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Alert ของ Streamlabs</label>

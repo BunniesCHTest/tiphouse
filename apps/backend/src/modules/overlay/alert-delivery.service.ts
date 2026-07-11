@@ -22,6 +22,7 @@ type AlertPayload = {
 
 type DeliveryOptions = {
   recordStreamlabsHistory?: boolean;
+  saveStreamlabsHistoryAsync?: boolean;
 };
 
 type StreamlabsDelivery = {
@@ -42,24 +43,26 @@ export class AlertDeliveryService {
 
   async deliver(overlay: OverlayRecord, payload: AlertPayload, options: DeliveryOptions = {}) {
     const streamlabs = this.streamlabsSettings(overlay.theme);
+    this.overlay.emitPaidDonation(overlay.streamerKey, {
+      ...payload,
+    });
+
     let streamlabsDelivery: StreamlabsDelivery | undefined;
     if (streamlabs?.connected && streamlabs.accessToken && (options.recordStreamlabsHistory || streamlabs.alertBoxEnabled)) {
-      const delivery = payload.testMode && streamlabs.alertBoxEnabled
-        ? await this.deliverTestAlertToStreamlabs(streamlabs.accessToken, payload)
-        : await this.deliverToStreamlabs(
+      const deliveryTask = payload.testMode && streamlabs.alertBoxEnabled
+        ? this.deliverTestAlertToStreamlabs(streamlabs.accessToken, payload)
+        : this.deliverToStreamlabs(
           streamlabs.accessToken,
           payload,
           !streamlabs.alertBoxEnabled,
         );
-      streamlabsDelivery = delivery;
-      if (streamlabs.alertBoxEnabled && delivery.ok) {
-        return delivery;
+      if (options.saveStreamlabsHistoryAsync || payload.testMode) {
+        deliveryTask.catch((error) => this.logger.warn(`Streamlabs delivery failed after TipHouse overlay emit: ${error instanceof Error ? error.message : "unknown"}`));
+      } else {
+        streamlabsDelivery = await deliveryTask;
       }
     }
 
-    this.overlay.emitPaidDonation(overlay.streamerKey, {
-      ...payload,
-    });
     return {
       ok: true,
       provider: "tiphouse",
