@@ -343,7 +343,7 @@ export class AuthService {
       streamlabs: {
         ...(typeof current.streamlabs === "object" && current.streamlabs ? current.streamlabs : {}),
         connected: true,
-        alertBoxEnabled: true,
+        alertBoxEnabled: typeof current.streamlabs?.alertBoxEnabled === "boolean" ? current.streamlabs.alertBoxEnabled : false,
         userId: streamlabsId,
         username: displayName,
         accessToken: token.access_token,
