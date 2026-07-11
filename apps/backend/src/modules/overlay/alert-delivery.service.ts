@@ -43,21 +43,43 @@ export class AlertDeliveryService {
 
   async deliver(overlay: OverlayRecord, payload: AlertPayload, options: DeliveryOptions = {}) {
     const streamlabs = this.streamlabsSettings(overlay.theme);
-    this.overlay.emitPaidDonation(overlay.streamerKey, {
-      ...payload,
-    });
+    const useStreamlabsAlert = Boolean(streamlabs?.connected && streamlabs.accessToken && streamlabs.alertBoxEnabled);
 
     let streamlabsDelivery: StreamlabsDelivery | undefined;
-    if (streamlabs?.connected && streamlabs.accessToken && (options.recordStreamlabsHistory || streamlabs.alertBoxEnabled)) {
+    if (useStreamlabsAlert) {
       const deliveryTask = payload.testMode && streamlabs.alertBoxEnabled
         ? this.deliverTestAlertToStreamlabs(streamlabs.accessToken, payload)
         : this.deliverToStreamlabs(
           streamlabs.accessToken,
           payload,
-          !streamlabs.alertBoxEnabled,
+          false,
         );
       if (options.saveStreamlabsHistoryAsync || payload.testMode) {
-        deliveryTask.catch((error) => this.logger.warn(`Streamlabs delivery failed after TipHouse overlay emit: ${error instanceof Error ? error.message : "unknown"}`));
+        if (payload.testMode) {
+          streamlabsDelivery = await deliveryTask;
+        } else {
+          deliveryTask.catch((error) => this.logger.warn(`Streamlabs alert delivery failed: ${error instanceof Error ? error.message : "unknown"}`));
+        }
+      } else {
+        streamlabsDelivery = await deliveryTask;
+      }
+
+      return {
+        ok: streamlabsDelivery?.ok ?? true,
+        provider: "streamlabs",
+        streamlabsHistory: streamlabsDelivery,
+        fallbackReason: streamlabsDelivery?.reason,
+      };
+    }
+
+    this.overlay.emitPaidDonation(overlay.streamerKey, {
+      ...payload,
+    });
+
+    if (streamlabs?.connected && streamlabs.accessToken && options.recordStreamlabsHistory) {
+      const deliveryTask = this.deliverToStreamlabs(streamlabs.accessToken, payload, true);
+      if (options.saveStreamlabsHistoryAsync) {
+        deliveryTask.catch((error) => this.logger.warn(`Streamlabs history delivery failed after TipHouse overlay emit: ${error instanceof Error ? error.message : "unknown"}`));
       } else {
         streamlabsDelivery = await deliveryTask;
       }
@@ -67,9 +89,6 @@ export class AlertDeliveryService {
       ok: true,
       provider: "tiphouse",
       streamlabsHistory: streamlabsDelivery,
-      fallbackReason: streamlabs?.alertBoxEnabled
-        ? streamlabsDelivery?.reason ?? "Streamlabs is not connected"
-        : undefined,
     };
   }
 
