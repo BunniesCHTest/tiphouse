@@ -45,6 +45,7 @@ const quickAmounts = [20, 50, 100, 300];
 const previewExpiredQr = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' fill='white'/%3E%3Crect x='24' y='24' width='56' height='56' fill='black'/%3E%3Crect x='36' y='36' width='32' height='32' fill='white'/%3E%3Crect x='176' y='24' width='56' height='56' fill='black'/%3E%3Crect x='188' y='36' width='32' height='32' fill='white'/%3E%3Crect x='24' y='176' width='56' height='56' fill='black'/%3E%3Crect x='36' y='188' width='32' height='32' fill='white'/%3E%3Cpath d='M104 28h16v16h-16zm32 0h16v32h-16zm-32 40h48v16h-48zm72 36h32v16h-32zm-72 24h16v48h-16zm32 0h56v16h-56zm72 24h24v40h-24zm-72 32h56v16h-56zm-32 24h16v24h-16zm32 8h72v16h-72z' fill='black'/%3E%3C/svg%3E";
 const MIN_DONATION_AMOUNT = 20;
 const MAX_DONOR_NAME_LENGTH = 20;
+const DEFAULT_DONOR_NAME = "แพนด้าที่ผ่านทางมา";
 const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
 const DEFAULT_DONATION_BACKGROUND = "#7D9CEDE6";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
@@ -83,14 +84,14 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [remainingSeconds, setRemainingSeconds] = useState(600);
   const [expiredModal, setExpiredModal] = useState(false);
   const [step, setStep] = useState<DonateStep>("form");
-  const [formState, setFormState] = useState({ donorName: "", donorEmail: "", message: "", amount: "", anonymous: false });
+  const [formState, setFormState] = useState({ donorName: DEFAULT_DONOR_NAME, donorEmail: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
   const [rankPeriod, setRankPeriod] = useState<RankPeriod>("all");
 
   useEffect(() => {
     const storedDonorName = decodeURIComponent(cookieValue("tiphouse_donor_name"));
     const storedDonorEmail = localStorage.getItem(DONOR_EMAIL_STORAGE_KEY) ?? "";
-    if (storedDonorName) setFormState((current) => current.anonymous || current.donorName ? current : { ...current, donorName: storedDonorName });
+    if (storedDonorName) setFormState((current) => current.anonymous ? current : { ...current, donorName: storedDonorName });
     if (storedDonorEmail) setFormState((current) => current.donorEmail ? current : { ...current, donorEmail: storedDonorEmail });
 
     api.get(`/page/${slug}`).then((res) => {
@@ -399,7 +400,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 <span className="donation-count">{formState.anonymous ? 0 : formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</span>
               </div>
               {blockedName && <p className="text-sm font-black text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
-              <button className={`donation-anonymous ${formState.anonymous ? "is-active" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
+              <button className={`hidden donation-anonymous ${formState.anonymous ? "is-active" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
                 {t("แสดงเป็น Anonymous", "Show as Anonymous")}
               </button>
             </label>
@@ -582,7 +583,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 </label>
                 {!formState.anonymous && <p className="text-right text-sm text-white/55">{formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</p>}
                 {blockedName && <p className="text-sm font-bold text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
-                <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
+                <button className={`hidden btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
                   {t("แสดงเป็น Anonymous", "Show as Anonymous")}
                 </button>
                 <label>
