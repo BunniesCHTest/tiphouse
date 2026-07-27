@@ -90,7 +90,7 @@ export class AdminController {
             slug: "admin-imports",
             displayName: "Admin Imports",
             handle: "@admin-imports",
-            minAmount: 1,
+            minAmount: 20,
             goalAmount: 20000,
             theme: {},
           },
@@ -200,6 +200,9 @@ export class AdminController {
     }
     if (pageData.handle !== undefined) {
       pageData.handle = String(pageData.handle ?? "").trim().slice(0, 30);
+    }
+    if (pageData.minAmount !== undefined) {
+      pageData.minAmount = Math.max(20, Number(pageData.minAmount));
     }
     const updated = await this.prisma.user.update({
       where: { id },

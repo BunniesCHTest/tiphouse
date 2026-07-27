@@ -52,7 +52,8 @@ export class SettingsService {
 
   async getPage(userId: string) {
     await this.ensureApproved(userId);
-    return this.prisma.donationPage.findUnique({ where: { userId } });
+    const page = await this.prisma.donationPage.findUnique({ where: { userId } });
+    return page ? { ...page, minAmount: Math.max(20, page.minAmount) } : page;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

@@ -36,7 +36,7 @@ const defaults: PageSettings = {
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 30;
-const MIN_DONATION_AMOUNT = 10;
+const MIN_DONATION_AMOUNT = 20;
 
 function normalizeDonationSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_TEXT_LENGTH);
@@ -290,12 +290,12 @@ export default function DonationPageSettings() {
                 const next = Number(event.target.value);
                 const belowMinimum = Number.isFinite(next) && next < MIN_DONATION_AMOUNT;
                 setMinAmountWarning(belowMinimum);
-                setSettings({ ...settings, minAmount: belowMinimum || !Number.isFinite(next) ? MIN_DONATION_AMOUNT : next });
+                setSettings({ ...settings, minAmount: Number.isFinite(next) ? next : MIN_DONATION_AMOUNT });
               }}
               onBlur={() => setSettings((current) => ({ ...current, minAmount: Math.max(MIN_DONATION_AMOUNT, Number(current.minAmount || MIN_DONATION_AMOUNT)) }))}
               required
             />
-            {minAmountWarning && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 10 บาท</span>}
+            {minAmountWarning && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 20 บาท</span>}
           </label>
           <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountWarning}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
         </form>

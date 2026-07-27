@@ -11,6 +11,7 @@ import { createFixedAmountThaiQr } from "./thai-qr";
 @Injectable()
 export class DonationsService {
   private readonly logger = new Logger(DonationsService.name);
+  private readonly minimumDonationAmount = 20;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -32,7 +33,7 @@ export class DonationsService {
       bannerUrl: page.bannerUrl,
       soundUrl: page.soundUrl,
       donationAccountName: page.donationAccountName,
-      minAmount: page.minAmount,
+      minAmount: Math.max(this.minimumDonationAmount, page.minAmount),
       goalAmount: page.goalAmount,
       theme: page.theme,
       overlayKey: page.user.overlay?.streamerKey,
@@ -50,14 +51,24 @@ export class DonationsService {
     });
   }
 
-  async rank(slug: string) {
+  async rank(slug: string, period: "week" | "month" | "all" = "all") {
     const page = await this.prisma.donationPage.findUnique({ where: { slug }, include: { user: { include: { overlay: true } } } });
     if (!page) throw new NotFoundException("Donation page not found");
-    const streamlabsRank = await this.streamlabsTopTips(page.user.overlay?.theme).catch(() => []);
+    const cutoff = this.rankCutoff(period);
+    const streamlabsRank = await this.streamlabsTopTips(page.user.overlay?.theme, period).catch(() => []);
     if (streamlabsRank.length) return streamlabsRank;
     const rows = await this.prisma.donation.groupBy({
       by: ["donorName", "anonymous"],
-      where: { pageId: page.id, paymentStatus: DonationStatus.PAID },
+      where: {
+        pageId: page.id,
+        paymentStatus: DonationStatus.PAID,
+        ...(cutoff ? {
+          OR: [
+            { paidAt: { gte: cutoff } },
+            { paidAt: null, createdAt: { gte: cutoff } },
+          ],
+        } : {}),
+      },
       _sum: { amount: true },
       _count: { _all: true },
       orderBy: { _sum: { amount: "desc" } },
@@ -95,9 +106,24 @@ export class DonationsService {
     };
   }
 
-  private async streamlabsTopTips(theme: unknown) {
+  private rankCutoff(period?: "week" | "month" | "all") {
+    const now = new Date();
+    if (period === "week") return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    if (period === "month") return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return null;
+  }
+
+  private streamlabsDate(item: any) {
+    const raw = item.created_at ?? item.createdAt ?? item.date ?? item.when;
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private async streamlabsTopTips(theme: unknown, period: "week" | "month" | "all" = "all") {
     const streamlabs = typeof theme === "object" && theme ? (theme as any).streamlabs : undefined;
     if (!streamlabs?.connected || !streamlabs?.accessToken) return [];
+    const cutoff = this.rankCutoff(period);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1800);
     const response = await fetch("https://streamlabs.com/api/v2.0/donations?limit=100", {
@@ -111,6 +137,10 @@ export class DonationsService {
     const totals = new Map<string, { donorName: string; amount: number; count: number; anonymous: boolean; source: string }>();
     for (const item of donations) {
       if (this.isTipHouseStreamlabsDonation(item)) continue;
+      if (cutoff) {
+        const happenedAt = this.streamlabsDate(item);
+        if (happenedAt && happenedAt < cutoff) continue;
+      }
       const donorName = String(item.name ?? item.from ?? item.donor_name ?? item.username ?? "Anonymous");
       const amount = Number(item.amount ?? item.formatted_amount ?? 0);
       if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -131,7 +161,8 @@ export class DonationsService {
     });
     if (!page) throw new NotFoundException("Donation page not found");
     if (page.user.accountStatus !== "APPROVED") throw new BadRequestException("Creator account is waiting for admin approval");
-    if (dto.amount < page.minAmount) throw new BadRequestException(`Minimum donation is ${page.minAmount}`);
+    const effectiveMinAmount = Math.max(this.minimumDonationAmount, page.minAmount);
+    if (dto.amount < effectiveMinAmount) throw new BadRequestException(`Minimum donation is ${effectiveMinAmount}`);
     if (dto.amount > 20000) throw new BadRequestException("Maximum donation is 20000");
 
     const transactionRef = `TH${randomBytes(8).toString("hex").toUpperCase()}`;
@@ -362,6 +393,9 @@ export class DonationsService {
     }
     const current = await this.prisma.donationPage.findUnique({ where: { userId }, select: { theme: true } });
     const currentTheme = typeof current?.theme === "object" && current.theme ? current.theme as Record<string, unknown> : {};
+    if (pageFields.minAmount !== undefined) {
+      pageFields.minAmount = Math.max(this.minimumDonationAmount, Number(pageFields.minAmount));
+    }
     const data: Prisma.DonationPageUpdateInput = {
       ...pageFields,
       theme: {

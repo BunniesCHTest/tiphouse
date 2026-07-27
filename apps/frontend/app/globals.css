@@ -238,3 +238,230 @@ select.input option {
 .media-on-dark .text-white\/55 {
   color: #ffffff;
 }
+
+.donation-landing {
+  background-position: center;
+  background-size: cover;
+  color: #2b3146;
+}
+
+.donation-hero {
+  min-height: 100vh;
+}
+
+.donation-form-card,
+.donation-rank-card {
+  border: 3px solid #83a2f4;
+  border-radius: 3rem;
+  background: rgba(249, 250, 255, 0.92);
+  box-shadow: 0 28px 80px rgba(70, 100, 190, 0.34);
+  color: #2b3146;
+}
+
+.donation-form-card {
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.donation-rank-card {
+  padding: 1.7rem 1.4rem;
+}
+
+.donation-label {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: #2b3146;
+}
+
+.donation-field-row,
+.donation-message-wrap {
+  position: relative;
+  display: flex;
+  min-height: 4rem;
+  align-items: center;
+  border: 3px solid #82a1f5;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2b3146;
+}
+
+.donation-field-row.is-invalid {
+  border-color: var(--app-danger);
+}
+
+.donation-field,
+.donation-message {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #2b3146;
+  font-size: 1.8rem;
+  font-weight: 900;
+  outline: none;
+}
+
+.donation-field {
+  padding: 0.6rem 1.1rem;
+}
+
+.donation-field-single {
+  width: 100%;
+  min-height: 4rem;
+  border: 3px solid #82a1f5;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2b3146;
+  padding: 0.6rem 1.1rem;
+  font-size: 1rem;
+  font-weight: 800;
+  outline: none;
+}
+
+.donation-field::placeholder {
+  color: transparent;
+}
+
+.donation-field-hint,
+.donation-count {
+  flex: 0 0 auto;
+  padding-right: 1rem;
+  color: rgba(43, 49, 70, 0.34);
+  font-size: 1.3rem;
+  font-weight: 900;
+}
+
+.donation-pill,
+.donation-rank-filter,
+.donation-anonymous {
+  min-height: 2.75rem;
+  border: 3px solid #82a1f5;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #2b3146;
+  font-weight: 900;
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.donation-pill:hover,
+.donation-rank-filter:hover,
+.donation-anonymous:hover {
+  transform: translateY(-1px);
+}
+
+.donation-pill.is-active,
+.donation-rank-filter.is-active,
+.donation-anonymous.is-active {
+  border-color: #9bbb18;
+  background: #e7f7a8;
+  color: #5c7115;
+}
+
+.donation-anonymous {
+  justify-self: start;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.donation-message-wrap {
+  min-height: 11rem;
+  align-items: flex-start;
+}
+
+.donation-message {
+  min-height: 10.5rem;
+  resize: vertical;
+  padding: 1rem 1.1rem;
+  font-size: 1.45rem;
+  line-height: 1.65;
+}
+
+.donation-continue {
+  display: grid;
+  justify-items: center;
+  border: 0;
+  background: transparent;
+}
+
+.donation-top-strip {
+  background: linear-gradient(90deg, transparent, #c99028 20%, #d7aa54 50%, #c99028 80%, transparent);
+  color: #ffffff;
+  padding: 0.55rem 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.donation-rank-row {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  color: #2b3146;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.donation-rank-number {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border-radius: 999px;
+  color: #83a2f4;
+  font-size: 1.55rem;
+  font-weight: 900;
+}
+
+.donation-rank-number.rank-2 {
+  background: #9fc21d;
+  color: #ffffff;
+}
+
+.donation-rank-number.rank-3 {
+  background: #83a2f4;
+  color: #ffffff;
+}
+
+.donation-rank-filter {
+  min-height: 2rem;
+  border-width: 0;
+  padding: 0.25rem 0.7rem;
+  background: #dce8ff;
+  color: #83a2f4;
+}
+
+.donation-rank-filter.is-active {
+  background: #d9ee94;
+}
+
+@media (max-width: 1023px) {
+  .donation-landing {
+    background-position: center top;
+  }
+
+  .donation-creator-copy {
+    padding-top: 5rem;
+  }
+
+  .donation-form-card,
+  .donation-rank-card {
+    border-radius: 2rem;
+  }
+}
+
+@media (max-width: 479px) {
+  .donation-form-card,
+  .donation-rank-card {
+    border-width: 2px;
+    border-radius: 1.5rem;
+  }
+
+  .donation-field,
+  .donation-message {
+    font-size: 1.15rem;
+  }
+
+  .donation-field-hint,
+  .donation-count {
+    font-size: 0.95rem;
+  }
+}

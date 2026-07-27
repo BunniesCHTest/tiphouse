@@ -18,7 +18,7 @@ export class CreateDonationDto {
   message!: string;
 
   @IsInt()
-  @Min(1)
+  @Min(20)
   @Max(20000)
   amount!: number;
 
@@ -72,7 +72,7 @@ export class UpdateDonationPageDto {
   donationBackgroundUrl?: string;
 
   @IsInt()
-  @Min(10)
+  @Min(20)
   @IsOptional()
   minAmount?: number;
 

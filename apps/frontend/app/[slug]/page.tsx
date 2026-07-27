@@ -39,10 +39,13 @@ type DonorRank = {
 };
 
 type DonateStep = "form" | "summary" | "qr" | "verifying" | "success";
+type RankPeriod = "week" | "month" | "all";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
 const rankMedals = ["🥇", "🥈", "🥉"];
-const quickAmounts = [50, 100, 300, 500, 1000];
+const quickAmounts = [20, 50, 100, 300];
+const previewExpiredQr = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' fill='white'/%3E%3Crect x='24' y='24' width='56' height='56' fill='black'/%3E%3Crect x='36' y='36' width='32' height='32' fill='white'/%3E%3Crect x='176' y='24' width='56' height='56' fill='black'/%3E%3Crect x='188' y='36' width='32' height='32' fill='white'/%3E%3Crect x='24' y='176' width='56' height='56' fill='black'/%3E%3Crect x='36' y='188' width='32' height='32' fill='white'/%3E%3Cpath d='M104 28h16v16h-16zm32 0h16v32h-16zm-32 40h48v16h-48zm72 36h32v16h-32zm-72 24h16v48h-16zm32 0h56v16h-56zm72 24h24v40h-24zm-72 32h56v16h-56zm-32 24h16v24h-16zm32 8h72v16h-72z' fill='black'/%3E%3C/svg%3E";
+const MIN_DONATION_AMOUNT = 20;
 const MAX_DONOR_NAME_LENGTH = 20;
 const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
@@ -89,6 +92,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [step, setStep] = useState<DonateStep>("form");
   const [formState, setFormState] = useState({ donorName: "", donorEmail: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
+  const [rankPeriod, setRankPeriod] = useState<RankPeriod>("week");
 
   useEffect(() => {
     const storedDonorName = decodeURIComponent(cookieValue("tiphouse_donor_name"));
@@ -107,12 +111,37 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setPage(null);
       setError("ไม่พบหน้าโดเนทนี้ หรือ backend ยังไม่พร้อม");
     });
-    api.get(`/donations/rank/${slug}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
   }, [slug]);
+
+  useEffect(() => {
+    api.get(`/donations/rank/${slug}?period=${rankPeriod}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
+  }, [rankPeriod, slug]);
 
   useEffect(() => {
     if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) return;
     if (searchParams.get("preview") === "verifying") setStep("verifying");
+    if (searchParams.get("preview") === "expired") {
+      const now = new Date();
+      setFormState((current) => ({
+        ...current,
+        donorName: current.donorName || "Test Bun",
+        donorEmail: current.donorEmail || "name@example.com",
+        message: current.message || "Preview expired QR",
+        amount: current.amount || "100",
+      }));
+      setQr({
+        qrDataUrl: previewExpiredQr,
+        qrDisplayName: "TipHouse Donate",
+        transactionRef: "THCEXPIREDPREVIEW",
+        paymentProvider: "STRIPE",
+        amount: 100,
+        createdAt: new Date(now.getTime() - 11 * 60 * 1000).toISOString(),
+        expiresAt: new Date(now.getTime() - 1000).toISOString(),
+      });
+      setRemainingSeconds(0);
+      setStep("qr");
+      setExpiredModal(true);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -164,7 +193,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   }, [qr, step, t]);
 
   const amountNumber = Number(formState.amount || 0);
-  const amountTooLow = Boolean(page && formState.amount && amountNumber < page.minAmount);
+  const effectiveMinAmount = Math.max(MIN_DONATION_AMOUNT, page?.minAmount ?? MIN_DONATION_AMOUNT);
+  const amountTooLow = Boolean(page && formState.amount && amountNumber < effectiveMinAmount);
   const amountTooHigh = Boolean(formState.amount && amountNumber > 20000);
   const displayDonorName = formState.anonymous ? THAI_ANONYMOUS : formState.donorName.trim();
   const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
@@ -173,8 +203,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
     const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.donorEmail.trim());
-    return Boolean(page && hasDonorName && hasValidEmail && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= page.minAmount && amountNumber <= 20000);
-  }, [amountNumber, blockedMessage, blockedName, formState, messageTooLong, page]);
+    return Boolean(page && hasDonorName && hasValidEmail && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= effectiveMinAmount && amountNumber <= 20000);
+  }, [amountNumber, blockedMessage, blockedName, effectiveMinAmount, formState, messageTooLong, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -288,6 +318,169 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     );
   }
 
+  if (step === "form") {
+    const rankRows = donorRank.slice(0, 10);
+    const donationHeroImage = page.theme?.donationBackgroundUrl || page.bannerUrl || defaultPage.bannerUrl;
+    return (
+      <main
+        className="donation-landing min-h-screen"
+        style={{
+          backgroundImage: `linear-gradient(90deg, rgba(118,151,226,.08), rgba(118,151,226,.18)), url(${donationHeroImage})`,
+        }}
+      >
+        <button className="btn fixed right-4 top-4 z-30 bg-white/80 text-[#2b3146] backdrop-blur" type="button" onClick={toggleLanguage}>
+          TH/ENG
+        </button>
+        <section className="donation-hero mx-auto grid min-h-screen w-[min(1480px,100%)] items-center gap-5 px-5 py-8 lg:grid-cols-[minmax(360px,1fr)_minmax(440px,540px)_minmax(270px,320px)] lg:px-12 xl:px-16">
+          <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-12">
+            <p className="text-4xl font-black drop-shadow-md sm:text-5xl">{t("สนับสนุน", "Support")}</p>
+            <h1 className="mt-2 break-words text-5xl font-black uppercase leading-none tracking-wide drop-shadow-lg sm:text-7xl">
+              {page.displayName}
+            </h1>
+            <p className="mt-5 max-w-xl text-lg font-bold leading-relaxed text-[#273047] drop-shadow-[0_1px_0_rgba(255,255,255,.5)] sm:text-xl">
+              {t("อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไปด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~", "Send a little support and your message to the creator you love.")}
+            </p>
+            {page.theme?.quicklinkUrl && (
+              <a className="mt-4 inline-flex font-black text-[#2b3146] underline decoration-white/70 underline-offset-4" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
+                {page.theme.quicklinkText || page.handle || "Quicklink"}
+              </a>
+            )}
+          </aside>
+
+          <form onSubmit={continueToSummary} className="donation-form-card grid gap-4">
+            <label className="grid gap-2">
+              <span className="donation-label">AMOUNT</span>
+              <div className={`donation-field-row ${amountTooLow || amountTooHigh ? "is-invalid" : ""}`}>
+                <input
+                  className="donation-field"
+                  name="amount"
+                  type="number"
+                  min={effectiveMinAmount}
+                  max={20000}
+                  value={formState.amount}
+                  onChange={(event) => setFormState({ ...formState, amount: event.target.value })}
+                  placeholder="ใส่จำนวนเงิน"
+                  required
+                />
+                <span className="donation-field-hint">ใส่จำนวนเงิน</span>
+              </div>
+              {(amountTooLow || amountTooHigh) && (
+                <span className="text-sm font-black text-coral">
+                  {amountTooLow ? `${t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿${effectiveMinAmount}` : t("ยอดโดเนทสูงสุด 20,000 บาท", "Maximum donation is 20,000 THB")}
+                </span>
+              )}
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {quickAmounts.map((amount) => (
+                <button
+                  key={amount}
+                  className={`donation-pill ${amountNumber === amount ? "is-active" : ""}`}
+                  type="button"
+                  onClick={() => setFormState({ ...formState, amount: String(amount) })}
+                >
+                  {amount.toLocaleString("en-US")} THB
+                </button>
+              ))}
+            </div>
+
+            <label className="grid gap-2">
+              <span className="donation-label">YOUR NAME</span>
+              <div className="donation-field-row">
+                <input
+                  className="donation-field"
+                  name="donorName"
+                  value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
+                  maxLength={MAX_DONOR_NAME_LENGTH}
+                  onChange={(event) => setFormState({ ...formState, donorName: event.target.value.slice(0, MAX_DONOR_NAME_LENGTH) })}
+                  disabled={formState.anonymous}
+                  required={!formState.anonymous}
+                />
+                <span className="donation-count">{formState.anonymous ? 0 : formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</span>
+              </div>
+              {blockedName && <p className="text-sm font-black text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
+              <button className={`donation-anonymous ${formState.anonymous ? "is-active" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
+                แสดงเป็น Anonymous
+              </button>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="donation-label">{t("อีเมลผู้ชำระเงิน", "Payer Email")}</span>
+              <input
+                className="donation-field-single"
+                name="donorEmail"
+                type="email"
+                maxLength={254}
+                value={formState.donorEmail}
+                onChange={(event) => setFormState({ ...formState, donorEmail: event.target.value.slice(0, 254) })}
+                placeholder="name@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="donation-label">{t("ข้อความถึงสตรีมเมอร์", "MESSAGE")}</span>
+              <div className="donation-message-wrap">
+                <textarea
+                  className="donation-message"
+                  name="message"
+                  maxLength={250}
+                  value={formState.message}
+                  onChange={(event) => setFormState({ ...formState, message: event.target.value.slice(0, 250) })}
+                  required
+                />
+                <span className="donation-count absolute right-5 top-5">{formState.message.length}/250</span>
+              </div>
+              {blockedMessage && <p className="text-sm font-black text-coral">{t("ข้อความมีคำที่ระบบไม่อนุญาต", "Message contains blocked words")}</p>}
+            </label>
+            {error && <p className="font-black text-coral">{error}</p>}
+            <button className="donation-continue disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canDonate} aria-label={t("ดำเนินการต่อ", "Continue")}>
+              <img src="/assets/continue-button.png" alt="" className="h-auto w-[min(274px,100%)]" />
+            </button>
+          </form>
+
+          <aside className="donation-rank-card">
+            <h2 className="sr-only">Top Donator Rank</h2>
+            {rankRows[0] ? (
+              <div className="text-center">
+                <div className="mx-auto grid size-20 place-items-center rounded-full bg-[#c98b1f] text-5xl font-black text-white shadow-lg">1</div>
+                <h3 className="mt-3 truncate text-2xl font-black text-[#c98b1f]">{rankRows[0].anonymous ? THAI_ANONYMOUS : rankRows[0].donorName}</h3>
+                <div className="donation-top-strip mt-4">TOP TIPPER</div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="mx-auto grid size-20 place-items-center rounded-full bg-[#c98b1f] text-5xl font-black text-white shadow-lg">1</div>
+                <h3 className="mt-3 text-2xl font-black text-[#c98b1f]">No Tips</h3>
+                <div className="donation-top-strip mt-4">TOP TIPPER</div>
+              </div>
+            )}
+            <div className="mt-4 grid gap-3">
+              {rankRows.slice(1, 10).map((item, index) => (
+                <div className="donation-rank-row" key={`${item.donorName}-${index}`}>
+                  <span className={`donation-rank-number rank-${index + 2}`}>{index + 2}</span>
+                  <span className="min-w-0 truncate">{item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
+                </div>
+              ))}
+              {!rankRows.slice(1).length && Array.from({ length: 3 }, (_, index) => (
+                <div className="donation-rank-row opacity-45" key={`empty-${index}`}>
+                  <span className="donation-rank-number">{index + 2}</span>
+                  <span>-</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-center gap-2">
+              {(["week", "month", "all"] as RankPeriod[]).map((period) => (
+                <button key={period} className={`donation-rank-filter ${rankPeriod === period ? "is-active" : ""}`} type="button" onClick={() => setRankPeriod(period)}>
+                  {period === "week" ? "Week" : period === "month" ? "Month" : "All"}
+                </button>
+              ))}
+            </div>
+          </aside>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main
       style={page.theme?.donationBackgroundUrl ? {
@@ -321,7 +514,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         </div>
       </section>
       <section className="mx-auto grid w-[min(1180px,calc(100%-1.5rem))] min-w-0 gap-5 py-6 sm:w-[min(1180px,calc(100%-2rem))] sm:gap-6 sm:py-8 md:grid-cols-[minmax(340px,430px)_minmax(0,1fr)]">
-        {step === "form" && (
+        {/*
           <div className="phone-frame">
             <form onSubmit={continueToSummary} className="phone-screen grid gap-4 p-5">
               <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-5 text-ink">
@@ -351,10 +544,10 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 </div>
                 <label className="mt-3 block">
                   {t("กำหนดเอง", "Custom")}
-                  <input className={`input mt-2 ${amountTooLow || amountTooHigh ? "border-coral text-coral" : ""}`} name="amount" type="number" min={page.minAmount} max={20000} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
-                  {amountTooLow && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿{page.minAmount}</span>}
+                  <input className={`input mt-2 ${amountTooLow || amountTooHigh ? "border-coral text-coral" : ""}`} name="amount" type="number" min={effectiveMinAmount} max={20000} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
+                  {amountTooLow && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿{effectiveMinAmount}</span>}
                   {amountTooHigh && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทสูงสุด 20,000 บาท", "Maximum donation is 20,000 THB")}</span>}
-                  {!amountTooLow && !amountTooHigh && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {page.minAmount.toLocaleString("th-TH")} - 20,000 {t("บาท", "THB")}</span>}
+                  {!amountTooLow && !amountTooHigh && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {effectiveMinAmount.toLocaleString("th-TH")} - 20,000 {t("บาท", "THB")}</span>}
                 </label>
               </section>
               <section className="draft-panel grid gap-3">
@@ -402,7 +595,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>{t("ดำเนินการต่อ", "Continue")}</button>
             </form>
           </div>
-        )}
+        */}
 
         {step === "summary" && (
           <div className="phone-frame">

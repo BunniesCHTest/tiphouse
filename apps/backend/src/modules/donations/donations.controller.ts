@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtUser } from "../../common/current-user.decorator";
 import { JwtAuthGuard } from "../../common/jwt-auth.guard";
 import { CreateDonationDto, UpdateDonationPageDto } from "./dto";
@@ -19,8 +19,8 @@ export class DonationsController {
   }
 
   @Get("donations/rank/:slug")
-  rank(@Param("slug") slug: string) {
-    return this.donations.rank(slug);
+  rank(@Param("slug") slug: string, @Query("period") period?: "week" | "month" | "all") {
+    return this.donations.rank(slug, period);
   }
 
   @Get("donations/receipt/:ref")
