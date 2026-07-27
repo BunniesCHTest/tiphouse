@@ -7,13 +7,14 @@ async function main() {
   const passwordHash = await argon2.hash("password123");
   const user = await prisma.user.upsert({
     where: { email: "creator@tiphouse.test" },
-    update: {},
+    update: { accountStatus: "APPROVED", creatorSetupCompleted: true },
     create: {
       username: "bunniesch",
       email: "creator@tiphouse.test",
       passwordHash,
       role: UserRole.USER,
       accountStatus: "APPROVED",
+      creatorSetupCompleted: true,
     },
   });
 

@@ -11,11 +11,9 @@ import { userCacheKey } from "@/lib/session";
 
 type PageSettings = {
   displayName: string;
-  handle: string;
+  description: string;
   slug: string;
-  quicklinkUrl: string;
   donationBackgroundUrl?: string;
-  bannerUrl?: string;
   minAmount: number;
 };
 
@@ -27,15 +25,15 @@ type SaveStatus = {
 
 const defaults: PageSettings = {
   displayName: "",
-  handle: "",
+  description: "",
   slug: "",
-  quicklinkUrl: "",
   donationBackgroundUrl: "",
   minAmount: 20,
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 30;
+const MAX_DESCRIPTION_LENGTH = 180;
 const MIN_DONATION_AMOUNT = 20;
 
 function normalizeDonationSlug(value: string) {
@@ -52,9 +50,9 @@ function readFileAsDataUrl(file: File | null) {
   });
 }
 
-function validateImageFile(file: File | null, label: string) {
+function validateImageFile(file: File | null) {
   if (file && file.size > MAX_IMAGE_SIZE) {
-    throw new Error(`${label} ต้องมีขนาดไม่เกิน 5MB`);
+    throw new Error("รูป BG หน้าโดเนทต้องมีขนาดไม่เกิน 5MB");
   }
 }
 
@@ -65,7 +63,6 @@ function isDataUrl(value?: string) {
 function cachePageSettings(page: PageSettings) {
   const cacheable = {
     ...page,
-    bannerUrl: isDataUrl(page.bannerUrl) ? "" : page.bannerUrl,
     donationBackgroundUrl: isDataUrl(page.donationBackgroundUrl) ? "" : page.donationBackgroundUrl,
   };
   try {
@@ -89,9 +86,7 @@ function errorMessage(error: unknown) {
 export default function DonationPageSettings() {
   const { t } = useAppPreferences();
   const [settings, setSettings] = useState<PageSettings>(defaults);
-  const [bannerPreview, setBannerPreview] = useState("");
   const [backgroundPreview, setBackgroundPreview] = useState("");
-  const [bannerInputKey, setBannerInputKey] = useState(0);
   const [backgroundInputKey, setBackgroundInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -102,26 +97,24 @@ export default function DonationPageSettings() {
     let cachedSettings: PageSettings | null = null;
     const cached = localStorage.getItem(userCacheKey("page_settings"));
     if (cached) {
-      const parsed = { ...defaults, ...JSON.parse(cached) };
-      cachedSettings = parsed;
+      cachedSettings = { ...defaults, ...JSON.parse(cached) };
     }
 
     api.get("/settings/page", { headers: authHeaders() }).then((res) => {
       if (!res.data) return;
-      const page = {
-        ...defaults,
-        ...res.data,
-        quicklinkUrl: res.data?.theme?.quicklinkUrl ?? "",
+      const page: PageSettings = {
+        displayName: res.data?.displayName ?? cachedSettings?.displayName ?? "",
+        description: res.data?.theme?.description ?? cachedSettings?.description ?? "",
+        slug: res.data?.slug ?? cachedSettings?.slug ?? "",
         donationBackgroundUrl: res.data?.theme?.donationBackgroundUrl ?? cachedSettings?.donationBackgroundUrl ?? "",
+        minAmount: res.data?.minAmount ?? cachedSettings?.minAmount ?? MIN_DONATION_AMOUNT,
       };
       setSettings(page);
       cachePageSettings(page);
-      if (page.bannerUrl) setBannerPreview(page.bannerUrl);
       if (page.donationBackgroundUrl) setBackgroundPreview(page.donationBackgroundUrl);
     }).catch(() => {
       if (!cachedSettings) return;
       setSettings(cachedSettings);
-      if (cachedSettings.bannerUrl) setBannerPreview(cachedSettings.bannerUrl);
       if (cachedSettings.donationBackgroundUrl) setBackgroundPreview(cachedSettings.donationBackgroundUrl);
     }).finally(() => setLoading(false));
   }, []);
@@ -131,14 +124,11 @@ export default function DonationPageSettings() {
     setSaving(true);
     setStatus(null);
     const form = new FormData(event.currentTarget);
-    const bannerFile = form.get("bannerFile") instanceof File ? (form.get("bannerFile") as File) : null;
     const backgroundFile = form.get("backgroundFile") instanceof File ? (form.get("backgroundFile") as File) : null;
-    let bannerUrl = settings.bannerUrl;
     let donationBackgroundUrl = settings.donationBackgroundUrl;
+
     try {
-      validateImageFile(bannerFile && bannerFile.size ? bannerFile : null, "Banner");
-      validateImageFile(backgroundFile && backgroundFile.size ? backgroundFile : null, "BG หน้าโดเนท");
-      bannerUrl = (await readFileAsDataUrl(bannerFile && bannerFile.size ? bannerFile : null)) ?? settings.bannerUrl;
+      validateImageFile(backgroundFile && backgroundFile.size ? backgroundFile : null);
       donationBackgroundUrl = (await readFileAsDataUrl(backgroundFile && backgroundFile.size ? backgroundFile : null)) ?? settings.donationBackgroundUrl;
     } catch (caught) {
       setStatus({
@@ -149,27 +139,28 @@ export default function DonationPageSettings() {
       setSaving(false);
       return;
     }
-    const handle = String(form.get("handle") ?? "").trim().slice(0, MAX_TEXT_LENGTH);
+
     const payload = {
       displayName: String(form.get("displayName") ?? "").trim().slice(0, MAX_TEXT_LENGTH),
-      handle,
       slug: normalizeDonationSlug(String(form.get("slug") ?? "").trim()),
-      quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
-      bannerUrl,
       donationBackgroundUrl,
       minAmount: Math.max(MIN_DONATION_AMOUNT, Number(form.get("minAmount") ?? defaults.minAmount)),
       theme: {
-        quicklinkUrl: String(form.get("quicklinkUrl") ?? "").trim(),
-        quicklinkText: handle,
+        description: String(form.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION_LENGTH),
         donationBackgroundUrl,
       },
     };
 
     try {
       const { data } = await api.patch("/settings/page", payload, { headers: authHeaders() });
-      const savedPage = { ...payload, ...data, quicklinkUrl: data?.theme?.quicklinkUrl ?? payload.quicklinkUrl };
+      const savedPage: PageSettings = {
+        displayName: data?.displayName ?? payload.displayName,
+        description: data?.theme?.description ?? payload.theme.description,
+        slug: data?.slug ?? payload.slug,
+        donationBackgroundUrl: data?.theme?.donationBackgroundUrl ?? payload.donationBackgroundUrl,
+        minAmount: data?.minAmount ?? payload.minAmount,
+      };
       setSettings(savedPage);
-      if (savedPage.bannerUrl) setBannerPreview(savedPage.bannerUrl);
       if (savedPage.donationBackgroundUrl) setBackgroundPreview(savedPage.donationBackgroundUrl);
       cachePageSettings(savedPage);
       window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: savedPage }));
@@ -189,22 +180,10 @@ export default function DonationPageSettings() {
     }
   }
 
-  function onBannerChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBannerPreview(URL.createObjectURL(file));
-  }
-
   function onBackgroundChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     setBackgroundPreview(URL.createObjectURL(file));
-  }
-
-  function clearBanner() {
-    setSettings((current) => ({ ...current, bannerUrl: "" }));
-    setBannerPreview("");
-    setBannerInputKey((key) => key + 1);
   }
 
   function clearBackground() {
@@ -220,86 +199,76 @@ export default function DonationPageSettings() {
         <main className="mx-auto w-[min(980px,calc(100%-2rem))] py-10">
           <div className="h-12 w-72 animate-pulse rounded-lg bg-white/10" />
           <section className="card mt-8 grid gap-5 p-5">
-            {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-white/10" />)}
+            {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-white/10" />)}
             <div className="h-44 animate-pulse rounded-lg bg-white/10" />
           </section>
         </main>
       ) : (
-      <main className="mx-auto w-[min(980px,calc(100%-2rem))] py-10">
-        {status && (
-          <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 px-4">
-            <section className="card max-w-md p-6 text-center">
-              <span className={`badge ${status.type === "success" ? "text-mint" : "text-coral"}`}>{status.type === "success" ? "SUCCESS" : "ERROR"}</span>
-              <h2 className="mt-3 text-3xl font-black">{status.title}</h2>
-              <p className="mt-2 text-white/65">{status.message}</p>
-              <div className="mt-5 flex flex-wrap justify-center gap-3">
-                {status.type === "success" && <Link className="btn btn-primary" href={`/${settings.slug}`} target="_blank">{t("เปิดหน้าโดเนท", "Open Donation Page")}</Link>}
-                <button className="btn" type="button" onClick={() => setStatus(null)}>{t("ปิด", "Close")}</button>
-              </div>
-            </section>
-          </div>
-        )}
-        <p className="font-bold text-mint">Donation Page Builder</p>
-        <h1 className="mt-3 text-5xl font-black">{t("ตั้งค่าหน้าโดเนท", "Donation Page Settings")}</h1>
-        <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
-          <label>{t("ชื่อครีเอเตอร์", "Creator Name")}<input className="input mt-2" name="displayName" maxLength={MAX_TEXT_LENGTH} value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value.slice(0, MAX_TEXT_LENGTH) })} required /><span className="mt-2 block text-sm text-white/60">{settings.displayName.length}/{MAX_TEXT_LENGTH}</span></label>
-          <div className="grid gap-4 md:grid-cols-2">
+        <main className="mx-auto w-[min(980px,calc(100%-2rem))] py-10">
+          {status && (
+            <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 px-4">
+              <section className="card max-w-md p-6 text-center">
+                <span className={`badge ${status.type === "success" ? "text-mint" : "text-coral"}`}>{status.type === "success" ? "SUCCESS" : "ERROR"}</span>
+                <h2 className="mt-3 text-3xl font-black">{status.title}</h2>
+                <p className="mt-2 text-white/65">{status.message}</p>
+                <div className="mt-5 flex flex-wrap justify-center gap-3">
+                  {status.type === "success" && <Link className="btn btn-primary" href={`/${settings.slug}`} target="_blank">{t("เปิดหน้าโดเนท", "Open Donation Page")}</Link>}
+                  <button className="btn" type="button" onClick={() => setStatus(null)}>{t("ปิด", "Close")}</button>
+                </div>
+              </section>
+            </div>
+          )}
+          <p className="font-bold text-mint">Donation Page Builder</p>
+          <h1 className="mt-3 text-5xl font-black">{t("ตั้งค่าหน้าโดเนท", "Donation Page Settings")}</h1>
+          <form onSubmit={submit} className="card mt-8 grid gap-4 p-5">
             <label>
-              Handle
-              <input className="input mt-2" name="handle" maxLength={MAX_TEXT_LENGTH} value={settings.handle} onChange={(event) => setSettings({ ...settings, handle: event.target.value.slice(0, MAX_TEXT_LENGTH) })} required />
-              <span className="mt-2 block text-sm text-white/60">{settings.handle.length}/{MAX_TEXT_LENGTH}</span>
+              {t("ชื่อครีเอเตอร์", "Creator Name")}
+              <input className="input mt-2" name="displayName" maxLength={MAX_TEXT_LENGTH} value={settings.displayName} onChange={(event) => setSettings({ ...settings, displayName: event.target.value.slice(0, MAX_TEXT_LENGTH) })} required />
+              <span className="mt-2 block text-sm text-white/60">{settings.displayName.length}/{MAX_TEXT_LENGTH}</span>
             </label>
-            <label>Quicklink URL<input className="input mt-2" name="quicklinkUrl" value={settings.quicklinkUrl} onChange={(event) => setSettings({ ...settings, quicklinkUrl: event.target.value })} placeholder="https://www.twitch.tv/..." /></label>
-          </div>
-          <label>
-            {t("URL หน้าโดเนท", "Donation Page URL")}
-            <input className="input mt-2" name="slug" maxLength={MAX_TEXT_LENGTH} value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: normalizeDonationSlug(event.target.value) })} required />
-            <span className="mt-2 block text-sm text-white/60">{t("4-30 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น", "4-30 characters. Lowercase letters and numbers only.")}</span>
-          </label>
-          <div>
-            <label className="font-bold">{t("รูป Banner", "Banner Image")}</label>
-            <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 640 px, ไฟล์ JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 640 px, JPG/PNG/WebP, up to 5MB.")}</p>
-            <input key={bannerInputKey} className="input mt-2" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBannerChange} />
-            {bannerPreview && (
-              <div className="relative mt-3">
-                <img alt="Banner preview" src={bannerPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete banner image" title="Delete banner image" onClick={clearBanner}>X</button>
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="font-bold">BG หน้าโดเนท</label>
-            <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 1080 px สำหรับพื้นหลังส่วนเนื้อหาด้านล่าง Banner, JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 1080 px for the content background below the banner, JPG/PNG/WebP, up to 5MB.")}</p>
-            <input key={backgroundInputKey} className="input mt-2" name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBackgroundChange} />
-            {backgroundPreview && (
-              <div className="relative mt-3">
-                <img alt="Donation background preview" src={backgroundPreview} className="h-44 w-full rounded-lg object-cover" />
-                <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete donation background image" title="Delete donation background image" onClick={clearBackground}>X</button>
-              </div>
-            )}
-          </div>
-          <label>
-            {t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}
-            <input
-              className={`input mt-2 ${minAmountWarning ? "border-coral text-coral" : ""}`}
-              name="minAmount"
-              type="number"
-              min={MIN_DONATION_AMOUNT}
-              value={settings.minAmount}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                const belowMinimum = Number.isFinite(next) && next < MIN_DONATION_AMOUNT;
-                setMinAmountWarning(belowMinimum);
-                setSettings({ ...settings, minAmount: Number.isFinite(next) ? next : MIN_DONATION_AMOUNT });
-              }}
-              onBlur={() => setSettings((current) => ({ ...current, minAmount: Math.max(MIN_DONATION_AMOUNT, Number(current.minAmount || MIN_DONATION_AMOUNT)) }))}
-              required
-            />
-            {minAmountWarning && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 20 บาท</span>}
-          </label>
-          <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountWarning}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
-        </form>
-      </main>
+            <label>
+              Description
+              <textarea className="input mt-2 min-h-28 resize-y" name="description" maxLength={MAX_DESCRIPTION_LENGTH} value={settings.description} onChange={(event) => setSettings({ ...settings, description: event.target.value.slice(0, MAX_DESCRIPTION_LENGTH) })} placeholder={t("ข้อความแนะนำตัวหรือข้อความใต้ชื่อครีเอเตอร์บนหน้าโดเนท", "Short intro shown under the creator name on the donation page")} />
+              <span className="mt-2 block text-sm text-white/60">{settings.description.length}/{MAX_DESCRIPTION_LENGTH}</span>
+            </label>
+            <label>
+              {t("URL หน้าโดเนท", "Donation Page URL")}
+              <input className="input mt-2" name="slug" maxLength={MAX_TEXT_LENGTH} value={settings.slug} onChange={(event) => setSettings({ ...settings, slug: normalizeDonationSlug(event.target.value) })} required />
+              <span className="mt-2 block text-sm text-white/60">{t("4-30 ตัวอักษร ใช้ตัวพิมพ์เล็กและตัวเลขเท่านั้น", "4-30 characters. Lowercase letters and numbers only.")}</span>
+            </label>
+            <div>
+              <label className="font-bold">BG หน้าโดเนท</label>
+              <p className="mt-1 text-sm text-white/60">{t("แนะนำขนาด 1920 x 1080 px ใช้เป็นพื้นหลังหน้าโดเนท, JPG/PNG/WebP, ไม่เกิน 5MB", "Recommended size 1920 x 1080 px for the donation page background, JPG/PNG/WebP, up to 5MB.")}</p>
+              <input key={backgroundInputKey} className="input mt-2" name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onBackgroundChange} />
+              {backgroundPreview && (
+                <div className="relative mt-3">
+                  <img alt="Donation background preview" src={backgroundPreview} className="h-44 w-full rounded-lg object-cover" />
+                  <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete donation background image" title="Delete donation background image" onClick={clearBackground}>X</button>
+                </div>
+              )}
+            </div>
+            <label>
+              {t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}
+              <input
+                className={`input mt-2 ${minAmountWarning ? "border-coral text-coral" : ""}`}
+                name="minAmount"
+                type="number"
+                min={MIN_DONATION_AMOUNT}
+                value={settings.minAmount}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  const belowMinimum = Number.isFinite(next) && next < MIN_DONATION_AMOUNT;
+                  setMinAmountWarning(belowMinimum);
+                  setSettings({ ...settings, minAmount: Number.isFinite(next) ? next : MIN_DONATION_AMOUNT });
+                }}
+                onBlur={() => setSettings((current) => ({ ...current, minAmount: Math.max(MIN_DONATION_AMOUNT, Number(current.minAmount || MIN_DONATION_AMOUNT)) }))}
+                required
+              />
+              {minAmountWarning && <span className="mt-2 block text-sm font-bold text-coral">ยอดโดเนทขั้นต่ำต้องไม่น้อยกว่า 20 บาท</span>}
+            </label>
+            <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={saving || minAmountWarning}>{saving ? t("กำลังบันทึก...", "Saving...") : t("บันทึกหน้าโดเนท", "Save Donation Page")}</button>
+          </form>
+        </main>
       )}
     </AuthGate>
   );

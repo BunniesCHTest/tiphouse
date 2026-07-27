@@ -77,6 +77,7 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
 
   const showPublicMenu = !loggedIn || publicOnly;
   const showAppMenu = loggedIn && !publicOnly;
+  const showPayoutMenu = false;
 
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-ink/80 px-5 py-4 backdrop-blur">
@@ -90,7 +91,7 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href={`/${donationSlug}`} target="_blank" rel="noopener">{t("หน้าโดเนท", "Donation Page")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/dashboard">Dashboard</Link>}
         {showAppMenu && <Link className="btn min-h-9 px-3 py-1" href="/settings/profile">{t("จัดการโปรไฟล์", "Profile")}</Link>}
-        {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">{t("ข้อมูลบัญชีโอนจ่าย", "Payout Account")}</Link>}
+        {showAppMenu && approved && showPayoutMenu && <Link className="btn min-h-9 px-3 py-1" href="/settings/bank">{t("ข้อมูลบัญชีโอนจ่าย", "Payout Account")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">{t("ตั้งค่าหน้าโดเนท", "Donation Settings")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">{t("ตั้งค่า Overlay", "Overlay Settings")}</Link>}
         {showAppMenu && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}

@@ -21,7 +21,7 @@ type UserRow = {
     contactEmail?: string | null;
     receivingQrImageUrl?: string | null;
   } | null;
-  page?: { slug: string; displayName: string; handle?: string | null; minAmount?: number; goalAmount?: number } | null;
+  page?: { slug: string; displayName: string; minAmount?: number; goalAmount?: number } | null;
   _count?: { donations: number; approvals: number };
 };
 
@@ -58,6 +58,7 @@ type AdminTab = "users" | "transactions" | "approvals";
 const TRANSACTION_PAGE_SIZE = 10;
 const APPROVAL_PAGE_SIZE = 10;
 const MAX_CREATOR_FIELD_LENGTH = 30;
+const SHOW_PAYOUT_DETAILS = false;
 
 function normalizeAdminSlug(value: FormDataEntryValue | null) {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_CREATOR_FIELD_LENGTH);
@@ -378,7 +379,6 @@ export default function AdminPage() {
           page: {
             slug,
             displayName,
-            handle: normalizeLimitedText(form.get("handle")),
           },
         },
         { headers: authHeaders("admin") },
@@ -799,7 +799,6 @@ export default function AdminPage() {
                   <label>ชื่อแสดงผล<input className="input mt-2" name="displayName" maxLength={MAX_CREATOR_FIELD_LENGTH} defaultValue={selectedUser.page?.displayName ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.slice(0, MAX_CREATOR_FIELD_LENGTH); }} /></label>
                   <label>Email<input className="input mt-2" name="email" type="email" defaultValue={selectedUser.email} required /></label>
                   <label>Email แจ้งเตือนโดเนท<input className="input mt-2" name="donationNotificationEmail" type="email" defaultValue={selectedUser.donationNotificationEmail ?? ""} /></label>
-                  <label>Handle<input className="input mt-2" name="handle" maxLength={MAX_CREATOR_FIELD_LENGTH} defaultValue={selectedUser.page?.handle ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.slice(0, MAX_CREATOR_FIELD_LENGTH); }} /></label>
                   <label>URL หน้าโดเนท<input className="input mt-2" name="slug" maxLength={MAX_CREATOR_FIELD_LENGTH} pattern="[a-z0-9]{4,30}" defaultValue={selectedUser.page?.slug ?? ""} onInput={(event) => { event.currentTarget.value = event.currentTarget.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_CREATOR_FIELD_LENGTH); }} /><span className="mt-2 block text-xs text-white/55">4-30 lowercase letters and numbers only</span></label>
                   <label>Role<select className="input mt-2" name="role" defaultValue={selectedUser.role || "USER"}><option>USER</option><option>ADMIN</option><option>ACCOUNTING</option></select></label>
                   <label>Status<select className="input mt-2" name="accountStatus" defaultValue={displayUserStatus(selectedUser)}><option>ACTIVE</option><option>SUSPENDED</option><option>PENDING</option></select></label>
@@ -823,7 +822,7 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="draft-panel">
+              {SHOW_PAYOUT_DETAILS && <div className="draft-panel">
                 <h3 className="text-xl font-black">ข้อมูลบัญชีโอนจ่าย</h3>
                 {selectedUser.payout ? (
                   <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
@@ -846,7 +845,7 @@ export default function AdminPage() {
                     </dl>
                   </div>
                 ) : <p className="mt-3 text-white/55">ยังไม่มีข้อมูลบัญชีโอนจ่ายของ User นี้</p>}
-              </div>
+              </div>}
             </section>
           </div>
         )}

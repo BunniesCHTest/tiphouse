@@ -8,16 +8,14 @@ import { useAppPreferences } from "@/lib/app-preferences";
 type PageData = {
   slug: string;
   displayName: string;
-  handle: string;
   bannerUrl?: string | null;
   avatarUrl?: string | null;
   donationAccountName?: string | null;
   minAmount: number;
   goalAmount: number;
   theme?: {
-    quicklinkUrl?: string;
-    quicklinkText?: string;
     donationBackgroundUrl?: string;
+    description?: string;
   } | null;
 };
 
@@ -48,25 +46,20 @@ const previewExpiredQr = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
 const MIN_DONATION_AMOUNT = 20;
 const MAX_DONOR_NAME_LENGTH = 20;
 const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
+const DEFAULT_DONATION_BACKGROUND = "#7D9CEDE6";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
 
 const defaultPage: PageData = {
   slug: "bunniesch",
-  displayName: "Bunnie SCH",
-  handle: "@bunniesch",
-  bannerUrl: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80",
+  displayName: "CONNESE.PLAI",
+  bannerUrl: null,
   donationAccountName: "Bunnie SCH Donate",
   minAmount: 20,
   goalAmount: 5000,
   theme: {},
 };
-
-function externalUrl(value?: string) {
-  if (!value) return "";
-  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
-}
 
 function cookieValue(name: string) {
   if (typeof document === "undefined") return "";
@@ -92,7 +85,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [step, setStep] = useState<DonateStep>("form");
   const [formState, setFormState] = useState({ donorName: "", donorEmail: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
-  const [rankPeriod, setRankPeriod] = useState<RankPeriod>("week");
+  const [rankPeriod, setRankPeriod] = useState<RankPeriod>("all");
 
   useEffect(() => {
     const storedDonorName = decodeURIComponent(cookieValue("tiphouse_donor_name"));
@@ -116,6 +109,11 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   useEffect(() => {
     api.get(`/donations/rank/${slug}?period=${rankPeriod}`).then((res) => setDonorRank(res.data ?? [])).catch(() => setDonorRank([]));
   }, [rankPeriod, slug]);
+
+  useEffect(() => {
+    if (!formState.anonymous) return;
+    setFormState((current) => current.donorName ? { ...current, donorName: "" } : current);
+  }, [formState.anonymous, language]);
 
   useEffect(() => {
     if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) return;
@@ -196,15 +194,17 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const effectiveMinAmount = Math.max(MIN_DONATION_AMOUNT, page?.minAmount ?? MIN_DONATION_AMOUNT);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < effectiveMinAmount);
   const amountTooHigh = Boolean(formState.amount && amountNumber > 20000);
-  const displayDonorName = formState.anonymous ? THAI_ANONYMOUS : formState.donorName.trim();
+  const anonymousLabel = t(THAI_ANONYMOUS, "Anonymous");
+  const amountPlaceholder = t("ใส่จำนวนเงิน", "Amount");
+  const displayDonorName = formState.anonymous ? anonymousLabel : formState.donorName.trim();
   const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
   const blockedMessage = hasBlockedWord(formState.message);
   const messageTooLong = formState.message.length > 250;
+  const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.donorEmail.trim());
   const canDonate = useMemo(() => {
     const hasDonorName = formState.anonymous || formState.donorName.trim();
-    const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.donorEmail.trim());
     return Boolean(page && hasDonorName && hasValidEmail && !blockedName && !blockedMessage && !messageTooLong && formState.message.trim() && formState.amount && Number.isFinite(amountNumber) && amountNumber >= effectiveMinAmount && amountNumber <= 20000);
-  }, [amountNumber, blockedMessage, blockedName, effectiveMinAmount, formState, messageTooLong, page]);
+  }, [amountNumber, blockedMessage, blockedName, effectiveMinAmount, formState, hasValidEmail, messageTooLong, page]);
 
   function continueToSummary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -212,7 +212,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     if (!formState.anonymous) {
       document.cookie = `tiphouse_donor_name=${encodeURIComponent(formState.donorName.trim())};path=/;max-age=31536000;samesite=lax`;
     }
-    localStorage.setItem(DONOR_EMAIL_STORAGE_KEY, formState.donorEmail.trim().toLowerCase());
+    if (formState.donorEmail.trim()) localStorage.setItem(DONOR_EMAIL_STORAGE_KEY, formState.donorEmail.trim().toLowerCase());
     setError("");
     setStep("summary");
   }
@@ -320,36 +320,37 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
   if (step === "form") {
     const rankRows = donorRank.slice(0, 10);
-    const donationHeroImage = page.theme?.donationBackgroundUrl || page.bannerUrl || defaultPage.bannerUrl;
+    const secondaryRankRows = rankRows.slice(1, 10);
+    const emptyRankRows = Math.max(0, 9 - secondaryRankRows.length);
+    const donationHeroImage = page.theme?.donationBackgroundUrl || "";
+    const creatorDescription = page.theme?.description || t("อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไปด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~", "Send a little support and your message to the creator you love.");
     return (
       <main
         className="donation-landing min-h-screen"
         style={{
-          backgroundImage: `linear-gradient(90deg, rgba(118,151,226,.08), rgba(118,151,226,.18)), url(${donationHeroImage})`,
+          backgroundColor: DEFAULT_DONATION_BACKGROUND,
+          backgroundImage: donationHeroImage
+            ? `linear-gradient(90deg, rgba(118,151,226,.08), rgba(118,151,226,.18)), url(${donationHeroImage})`
+            : "none",
         }}
       >
         <button className="btn fixed right-4 top-4 z-30 bg-white/80 text-[#2b3146] backdrop-blur" type="button" onClick={toggleLanguage}>
           TH/ENG
         </button>
-        <section className="donation-hero mx-auto grid min-h-screen w-[min(1480px,100%)] items-center gap-5 px-5 py-8 lg:grid-cols-[minmax(360px,1fr)_minmax(440px,540px)_minmax(270px,320px)] lg:px-12 xl:px-16">
-          <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-12">
+        <section className="donation-hero mx-auto grid min-h-screen w-[min(1540px,100%)] items-center gap-4 px-5 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(440px,520px)_minmax(270px,320px)] lg:px-8 xl:px-10">
+          <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-[6.5rem]">
             <p className="text-4xl font-black drop-shadow-md sm:text-5xl">{t("สนับสนุน", "Support")}</p>
             <h1 className="mt-2 break-words text-5xl font-black uppercase leading-none tracking-wide drop-shadow-lg sm:text-7xl">
               {page.displayName}
             </h1>
-            <p className="mt-5 max-w-xl text-lg font-bold leading-relaxed text-[#273047] drop-shadow-[0_1px_0_rgba(255,255,255,.5)] sm:text-xl">
-              {t("อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไปด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~", "Send a little support and your message to the creator you love.")}
+            <p className="mt-5 max-w-xl text-lg font-bold leading-relaxed text-white/90 drop-shadow-[0_3px_8px_rgba(20,28,58,.5)] sm:text-xl">
+              {creatorDescription}
             </p>
-            {page.theme?.quicklinkUrl && (
-              <a className="mt-4 inline-flex font-black text-[#2b3146] underline decoration-white/70 underline-offset-4" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
-                {page.theme.quicklinkText || page.handle || "Quicklink"}
-              </a>
-            )}
           </aside>
 
           <form onSubmit={continueToSummary} className="donation-form-card grid gap-4">
             <label className="grid gap-2">
-              <span className="donation-label">AMOUNT</span>
+              <span className="donation-label">{t("จำนวนเงิน", "AMOUNT")}</span>
               <div className={`donation-field-row ${amountTooLow || amountTooHigh ? "is-invalid" : ""}`}>
                 <input
                   className="donation-field"
@@ -359,10 +360,10 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   max={20000}
                   value={formState.amount}
                   onChange={(event) => setFormState({ ...formState, amount: event.target.value })}
-                  placeholder="ใส่จำนวนเงิน"
+                  placeholder={amountPlaceholder}
                   required
                 />
-                <span className="donation-field-hint">ใส่จำนวนเงิน</span>
+                <span className="donation-field-hint">{amountPlaceholder}</span>
               </div>
               {(amountTooLow || amountTooHigh) && (
                 <span className="text-sm font-black text-coral">
@@ -384,12 +385,12 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </div>
 
             <label className="grid gap-2">
-              <span className="donation-label">YOUR NAME</span>
+              <span className="donation-label">{t("ชื่อผู้โดเนท", "YOUR NAME")}</span>
               <div className="donation-field-row">
                 <input
                   className="donation-field"
                   name="donorName"
-                  value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
+                  value={formState.anonymous ? anonymousLabel : formState.donorName}
                   maxLength={MAX_DONOR_NAME_LENGTH}
                   onChange={(event) => setFormState({ ...formState, donorName: event.target.value.slice(0, MAX_DONOR_NAME_LENGTH) })}
                   disabled={formState.anonymous}
@@ -399,12 +400,12 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               </div>
               {blockedName && <p className="text-sm font-black text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
               <button className={`donation-anonymous ${formState.anonymous ? "is-active" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
-                แสดงเป็น Anonymous
+                {t("แสดงเป็น Anonymous", "Show as Anonymous")}
               </button>
             </label>
 
-            <label className="grid gap-2">
-              <span className="donation-label">{t("อีเมลผู้ชำระเงิน", "Payer Email")}</span>
+            <label className="donation-payer-email grid gap-2">
+              <span className="donation-label">{t("อีเมลผู้ชำระเงิน", "PAYER EMAIL")}</span>
               <input
                 className="donation-field-single"
                 name="donorEmail"
@@ -416,6 +417,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 autoComplete="email"
                 required
               />
+              {formState.donorEmail && !hasValidEmail && <p className="text-sm font-black text-coral">{t("รูปแบบอีเมลไม่ถูกต้อง", "Invalid email format")}</p>}
             </label>
 
             <label className="grid gap-2">
@@ -435,7 +437,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </label>
             {error && <p className="font-black text-coral">{error}</p>}
             <button className="donation-continue disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canDonate} aria-label={t("ดำเนินการต่อ", "Continue")}>
-              <img src="/assets/continue-button.png" alt="" className="h-auto w-[min(274px,100%)]" />
+              <img src="/assets/continue-button.png" alt="" className="donation-continue-default h-auto w-[min(274px,100%)]" />
+              <img src="/assets/continue-button-active.png" alt="" className="donation-continue-active h-auto w-[min(274px,100%)]" />
             </button>
           </form>
 
@@ -444,7 +447,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             {rankRows[0] ? (
               <div className="text-center">
                 <div className="mx-auto grid size-20 place-items-center rounded-full bg-[#c98b1f] text-5xl font-black text-white shadow-lg">1</div>
-                <h3 className="mt-3 truncate text-2xl font-black text-[#c98b1f]">{rankRows[0].anonymous ? THAI_ANONYMOUS : rankRows[0].donorName}</h3>
+                <h3 className="mt-3 truncate text-2xl font-black text-[#c98b1f]">{rankRows[0].anonymous ? anonymousLabel : rankRows[0].donorName}</h3>
                 <div className="donation-top-strip mt-4">TOP TIPPER</div>
               </div>
             ) : (
@@ -454,26 +457,42 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 <div className="donation-top-strip mt-4">TOP TIPPER</div>
               </div>
             )}
-            <div className="mt-4 grid gap-3">
-              {rankRows.slice(1, 10).map((item, index) => (
+            <div className="donation-rank-list mt-4 grid gap-2">
+              {secondaryRankRows.map((item, index) => (
                 <div className="donation-rank-row" key={`${item.donorName}-${index}`}>
                   <span className={`donation-rank-number rank-${index + 2}`}>{index + 2}</span>
-                  <span className="min-w-0 truncate">{item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
+                  <span className="min-w-0 truncate">{item.anonymous ? anonymousLabel : item.donorName}</span>
                 </div>
               ))}
-              {!rankRows.slice(1).length && Array.from({ length: 3 }, (_, index) => (
+              {Array.from({ length: emptyRankRows }, (_, index) => (
                 <div className="donation-rank-row opacity-45" key={`empty-${index}`}>
-                  <span className="donation-rank-number">{index + 2}</span>
+                  <span className="donation-rank-number">{secondaryRankRows.length + index + 2}</span>
                   <span>-</span>
                 </div>
               ))}
             </div>
-            <div className="mt-5 flex justify-center gap-2">
+            <div className="donation-rank-actions">
+              <svg className="donation-sparkle" width="13" height="33" viewBox="0 0 13 33" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g opacity="0.8">
+                  <path d="M6.11416 23.1955C6.15855 23.0462 6.4341 23.0462 6.47849 23.1955C7.13564 25.4066 8.86983 27.1407 11.0809 27.7979C11.2302 27.8423 11.2302 28.1178 11.0809 28.1622C8.86983 28.8194 7.13564 30.5536 6.47849 32.7646C6.4341 32.914 6.15855 32.914 6.11416 32.7646C5.45701 30.5536 3.72282 28.8194 1.51178 28.1622C1.36242 28.1178 1.36242 27.8423 1.51178 27.7979C3.72282 27.1407 5.45701 25.4066 6.11416 23.1955Z" fill="#F6D78B"/>
+                  <path d="M6.16562 11.9716C6.19733 11.8649 6.39415 11.8649 6.42586 11.9716C6.89525 13.5509 8.13396 14.7896 9.71328 15.259C9.81996 15.2907 9.81996 15.4876 9.71328 15.5193C8.13396 15.9887 6.89525 17.2274 6.42586 18.8067C6.39415 18.9134 6.19733 18.9134 6.16562 18.8067C5.69623 17.2274 4.45753 15.9887 2.87821 15.5193C2.77153 15.4876 2.77153 15.2907 2.87821 15.259C4.45753 14.7896 5.69623 13.5509 6.16562 11.9716Z" fill="#F6D78B"/>
+                  <path d="M6.21709 3.54557C6.23612 3.48156 6.35421 3.48156 6.37323 3.54557C6.65487 4.49316 7.39809 5.23638 8.34568 5.51802C8.40969 5.53704 8.40969 5.65513 8.34568 5.67416C7.39809 5.95579 6.65487 6.69902 6.37323 7.64661C6.35421 7.71062 6.23611 7.71062 6.21709 7.64661C5.93545 6.69902 5.19223 5.95579 4.24464 5.67416C4.18063 5.65513 4.18063 5.53704 4.24464 5.51801C5.19223 5.23638 5.93545 4.49316 6.21709 3.54557Z" fill="#F6D78B"/>
+                </g>
+              </svg>
+              <div className="flex justify-center gap-2">
               {(["week", "month", "all"] as RankPeriod[]).map((period) => (
                 <button key={period} className={`donation-rank-filter ${rankPeriod === period ? "is-active" : ""}`} type="button" onClick={() => setRankPeriod(period)}>
                   {period === "week" ? "Week" : period === "month" ? "Month" : "All"}
                 </button>
               ))}
+              </div>
+              <svg className="donation-sparkle donation-sparkle-right" width="13" height="33" viewBox="0 0 13 33" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g opacity="0.8">
+                  <path d="M6.11416 23.1955C6.15855 23.0462 6.4341 23.0462 6.47849 23.1955C7.13564 25.4066 8.86983 27.1407 11.0809 27.7979C11.2302 27.8423 11.2302 28.1178 11.0809 28.1622C8.86983 28.8194 7.13564 30.5536 6.47849 32.7646C6.4341 32.914 6.15855 32.914 6.11416 32.7646C5.45701 30.5536 3.72282 28.8194 1.51178 28.1622C1.36242 28.1178 1.36242 27.8423 1.51178 27.7979C3.72282 27.1407 5.45701 25.4066 6.11416 23.1955Z" fill="#F6D78B"/>
+                  <path d="M6.16562 11.9716C6.19733 11.8649 6.39415 11.8649 6.42586 11.9716C6.89525 13.5509 8.13396 14.7896 9.71328 15.259C9.81996 15.2907 9.81996 15.4876 9.71328 15.5193C8.13396 15.9887 6.89525 17.2274 6.42586 18.8067C6.39415 18.9134 6.19733 18.9134 6.16562 18.8067C5.69623 17.2274 4.45753 15.9887 2.87821 15.5193C2.77153 15.4876 2.77153 15.2907 2.87821 15.259C4.45753 14.7896 5.69623 13.5509 6.16562 11.9716Z" fill="#F6D78B"/>
+                  <path d="M6.21709 3.54557C6.23612 3.48156 6.35421 3.48156 6.37323 3.54557C6.65487 4.49316 7.39809 5.23638 8.34568 5.51802C8.40969 5.53704 8.40969 5.65513 8.34568 5.67416C7.39809 5.95579 6.65487 6.69902 6.37323 7.64661C6.35421 7.71062 6.23611 7.71062 6.21709 7.64661C5.93545 6.69902 5.19223 5.95579 4.24464 5.67416C4.18063 5.65513 4.18063 5.53704 4.24464 5.51801C5.19223 5.23638 5.93545 4.49316 6.21709 3.54557Z" fill="#F6D78B"/>
+                </g>
+              </svg>
             </div>
           </aside>
         </section>
@@ -488,14 +507,18 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         backgroundAttachment: "fixed",
         backgroundPosition: "center top",
         backgroundSize: "cover",
-      } : undefined}
+      } : { backgroundColor: DEFAULT_DONATION_BACKGROUND }}
     >
       <button className="btn fixed right-4 top-4 z-30 bg-ink/80 backdrop-blur" type="button" onClick={toggleLanguage}>
         TH/ENG
       </button>
       <section
         className="grid min-h-[clamp(170px,24vh,260px)] content-end bg-cover bg-center p-4 sm:p-6"
-        style={{ backgroundImage: `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.bannerUrl ?? defaultPage.bannerUrl})` }}
+        style={{
+          backgroundImage: page.theme?.donationBackgroundUrl
+            ? `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.theme.donationBackgroundUrl})`
+            : "linear-gradient(rgba(125,156,237,.1),rgba(125,156,237,.48))",
+        }}
       >
         <div className="media-on-dark mx-auto flex w-[min(1100px,100%)] items-end gap-3 sm:gap-4">
           <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-white/70 bg-mint text-xl font-black text-ink sm:size-20 sm:text-2xl">
@@ -503,13 +526,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
           </div>
           <div>
             <h1 className="mt-2 break-words text-3xl font-black sm:text-5xl md:text-6xl">{page.displayName}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              {page.theme?.quicklinkUrl && (
-                <a className="text-base font-bold text-mint underline decoration-mint/50 underline-offset-4 hover:text-sky" href={externalUrl(page.theme.quicklinkUrl)} target="_blank" rel="noreferrer">
-                  {page.theme.quicklinkText || page.handle || "Quicklink"}
-                </a>
-              )}
-            </div>
+            {page.theme?.description && <p className="mt-2 max-w-2xl text-base font-bold text-white/80">{page.theme.description}</p>}
           </div>
         </div>
       </section>
@@ -556,7 +573,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                   <input
                     className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
                     name="donorName"
-                    value={formState.anonymous ? THAI_ANONYMOUS : formState.donorName}
+                    value={formState.anonymous ? anonymousLabel : formState.donorName}
                     maxLength={MAX_DONOR_NAME_LENGTH}
                     onChange={(event) => setFormState({ ...formState, donorName: event.target.value.slice(0, MAX_DONOR_NAME_LENGTH) })}
                     disabled={formState.anonymous}
@@ -566,7 +583,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 {!formState.anonymous && <p className="text-right text-sm text-white/55">{formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</p>}
                 {blockedName && <p className="text-sm font-bold text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
                 <button className={`btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
-                  แสดงเป็น Anonymous
+                  {t("แสดงเป็น Anonymous", "Show as Anonymous")}
                 </button>
                 <label>
                   {t("อีเมลผู้ชำระเงิน", "Payer Email")}
@@ -759,7 +776,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-sky/20 bg-white/5 px-3 py-2">
                   <strong className="flex min-w-0 items-center gap-2">
                     <span className="text-xl" aria-hidden="true">{rankMedals[index]}</span>
-                    <span className="truncate">{item.anonymous ? THAI_ANONYMOUS : item.donorName}</span>
+                    <span className="truncate">{item.anonymous ? anonymousLabel : item.donorName}</span>
                   </strong>
                   <strong className="shrink-0">฿{item.amount.toLocaleString(language === "en" ? "en-US" : "th-TH")}</strong>
                 </div>

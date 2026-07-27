@@ -72,7 +72,7 @@ export default function CreatorOnboardingPage() {
         slug,
         donationNotificationEmail: notificationEmail.trim(),
       }, { headers: authHeaders() });
-      const page = data?.page ?? { slug, displayName, handle: `@${slug}` };
+      const page = data?.page ?? { slug, displayName };
       localStorage.setItem(userCacheKey("donation_slug"), page.slug);
       localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(page));
       setSessionValue("user", "creator_setup_completed", "true");
