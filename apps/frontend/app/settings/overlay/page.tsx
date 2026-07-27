@@ -29,6 +29,7 @@ type OverlaySettings = {
   goalTargetAmount: number;
   goalStartDate: string;
   goalEndDate: string;
+  goalResetAt: string;
   goalHtml: string;
   goalCss: string;
   goalJs: string;
@@ -186,6 +187,21 @@ if (bar) {
   ], { duration: 700, easing: "ease-out", fill: "both" });
 }`;
 
+function dateInputValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function todayDateInputValue() {
+  return dateInputValue(new Date());
+}
+
+function defaultGoalEndDate() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + 1);
+  return dateInputValue(date);
+}
+
 const defaultSettings: OverlaySettings = {
   streamerKey: "",
   position: "Center",
@@ -202,8 +218,9 @@ const defaultSettings: OverlaySettings = {
   widgetJs: defaultWidgetJs,
   goalTitle: "Donate Goal",
   goalTargetAmount: 10000,
-  goalStartDate: "2026-05-03",
-  goalEndDate: "2026-12-31",
+  goalStartDate: todayDateInputValue(),
+  goalEndDate: defaultGoalEndDate(),
+  goalResetAt: "",
   goalHtml: defaultGoalHtml,
   goalCss: defaultGoalCss,
   goalJs: defaultGoalJs,
@@ -260,6 +277,7 @@ function normalizeOverlay(data: any, fallback: OverlaySettings = defaultSettings
     goalTargetAmount: data?.theme?.donateGoal?.targetAmount ?? data?.goalTargetAmount ?? fallback.goalTargetAmount,
     goalStartDate: data?.theme?.donateGoal?.startDate ?? data?.goalStartDate ?? fallback.goalStartDate,
     goalEndDate: data?.theme?.donateGoal?.endDate ?? data?.goalEndDate ?? fallback.goalEndDate,
+    goalResetAt: data?.theme?.donateGoal?.resetAt ?? data?.goalResetAt ?? fallback.goalResetAt,
     goalHtml: data?.theme?.donateGoal?.html ?? data?.goalHtml ?? fallback.goalHtml,
     goalCss: data?.theme?.donateGoal?.css ?? data?.goalCss ?? fallback.goalCss,
     goalJs: data?.theme?.donateGoal?.js ?? data?.goalJs ?? fallback.goalJs,
@@ -307,6 +325,7 @@ function overlayPayload(settings: OverlaySettings, options: { includeMedia?: boo
         targetAmount: settings.goalTargetAmount,
         startDate: settings.goalStartDate,
         endDate: settings.goalEndDate,
+        resetAt: settings.goalResetAt || undefined,
         html: settings.goalHtml,
         css: settings.goalCss,
         js: settings.goalJs,
@@ -412,6 +431,57 @@ export default function OverlaySettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveDonateGoalSettings(nextSettings: OverlaySettings, successMessage: string) {
+    setError("");
+    setNotice("");
+    setSaveStatus(null);
+    setSaving(true);
+    try {
+      const { data } = await api.patch("/settings/overlay", overlayPayload(nextSettings, { includeMedia: false }), { headers: authHeaders() });
+      const next = normalizeOverlay(data, nextSettings);
+      setSettings(next);
+      writeOverlayCache(userCacheKey("overlay_settings"), next);
+      writeOverlayCache(`tiphouse_overlay_settings:${next.streamerKey}`, next);
+      setNotice(successMessage);
+      setSaveStatus({
+        type: "success",
+        title: "บันทึกสำเร็จ",
+        message: successMessage,
+      });
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { message?: string | string[] } }; message?: string })?.response?.data?.message;
+      const detail = Array.isArray(message) ? message.join(", ") : message ?? (cause as Error)?.message ?? "กรุณาตรวจสอบข้อมูลหรือ backend";
+      setError(detail);
+      setSaveStatus({ type: "error", title: "บันทึกไม่สำเร็จ", message: detail });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetDonateGoal() {
+    await saveDonateGoalSettings(
+      { ...settings, goalResetAt: new Date().toISOString() },
+      "Reset Goal แล้ว ยอดในหลอดจะเริ่มนับจาก 0 โดยยังเก็บ Setting เดิมไว้",
+    );
+  }
+
+  async function endDonateGoal() {
+    await saveDonateGoalSettings(
+      {
+        ...settings,
+        goalTitle: defaultSettings.goalTitle,
+        goalTargetAmount: defaultSettings.goalTargetAmount,
+        goalStartDate: todayDateInputValue(),
+        goalEndDate: defaultGoalEndDate(),
+        goalResetAt: "",
+        goalHtml: defaultGoalHtml,
+        goalCss: defaultGoalCss,
+        goalJs: defaultGoalJs,
+      },
+      "End Goal แล้ว ระบบล้างค่า Donate Goal กลับเป็นค่าเริ่มต้น",
+    );
   }
 
   async function resetOverlayUrl() {
@@ -532,8 +602,7 @@ export default function OverlaySettingsPage() {
             {settings.customSoundUrl && <button className="btn" type="button" onClick={() => { setSettings({ ...settings, customSoundUrl: "" }); setSoundDirty(true); }}>ลบไฟล์เสียง</button>}
             <label>เสียง TTS<select className="input mt-2" name="ttsVoice" value={settings.ttsVoice} onChange={(event) => setSettings({ ...settings, ttsVoice: event.target.value as OverlaySettings["ttsVoice"] })}><option value="female">ผู้หญิง</option><option value="male">ผู้ชาย</option></select></label>
             <label className="flex gap-2 text-white/70"><input name="ttsEnabled" type="checkbox" checked={settings.ttsEnabled} onChange={(event) => setSettings({ ...settings, ttsEnabled: event.target.checked })} /> เปิด TTS</label>
-            <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} disabled={!settings.streamlabsConnected} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Alert ของ Streamlabs</label>
-            {!settings.streamlabsConnected && <p className="text-sm text-coral">ยังไม่ได้เชื่อมต่อ Streamlabs จากขั้นตอน Login จึงยังเลือกใช้ Streamlabs Alert ไม่ได้</p>}
+            <label className="flex gap-2 text-white/70"><input name="streamlabsAlertBoxEnabled" type="checkbox" checked={settings.streamlabsAlertBoxEnabled} onChange={(event) => setSettings({ ...settings, streamlabsAlertBoxEnabled: event.target.checked })} /> ใช้ Alert ของ Streamlabs</label>
             <label>HTML<textarea className="input mt-2 min-h-40 font-mono text-sm" name="widgetHtml" value={settings.widgetHtml} onChange={(event) => setSettings({ ...settings, widgetHtml: event.target.value })} /></label>
             <label>CSS<textarea className="input mt-2 min-h-52 font-mono text-sm" name="widgetCss" value={settings.widgetCss} onChange={(event) => setSettings({ ...settings, widgetCss: event.target.value })} /></label>
             <label>JS<textarea className="input mt-2 min-h-36 font-mono text-sm" name="widgetJs" value={settings.widgetJs} onChange={(event) => setSettings({ ...settings, widgetJs: event.target.value })} /></label>
@@ -561,6 +630,10 @@ export default function OverlaySettingsPage() {
             {notice && <p className="text-mint">{notice}</p>}
             {error && <p className="text-coral">{error}</p>}
             <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึก Donate Goal"}</button>
+            <div className="grid gap-3 md:grid-cols-2">
+              <button className="btn" type="button" disabled={saving} onClick={resetDonateGoal}>Reset Goal</button>
+              <button className="btn border-coral/60 bg-coral/15 text-coral" type="button" disabled={saving} onClick={endDonateGoal}>End Goal</button>
+            </div>
           </form>
           <div className={`card place-items-center p-5 ${activeTab === "goal" ? "grid" : "hidden"}`}>
             <iframe className="min-h-80 w-full rounded-lg border border-white/10 bg-transparent" sandbox="allow-scripts" srcDoc={goalPreviewSrcDoc} title="Donate goal preview" />

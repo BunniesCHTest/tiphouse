@@ -15,12 +15,28 @@ export class OverlayService {
       include: { user: { include: { page: true } } },
     });
     if (!overlay) return null;
-    const total = await this.prisma.donation.aggregate({
-      where: { userId: overlay.userId, paymentStatus: "PAID" },
-      _sum: { amount: true },
-    });
     const theme = typeof overlay.theme === "object" && overlay.theme ? overlay.theme as Record<string, any> : {};
     const streamlabs = typeof theme.streamlabs === "object" && theme.streamlabs ? theme.streamlabs : undefined;
+    const donateGoal = typeof theme.donateGoal === "object" && theme.donateGoal ? theme.donateGoal : {};
+    const goalStartDate = this.parseGoalDate(donateGoal.startDate);
+    const goalResetAt = this.parseGoalDate(donateGoal.resetAt);
+    const goalEndDate = this.parseGoalDate(donateGoal.endDate, true);
+    const goalCreatedAt: { gte?: Date; lte?: Date } = {};
+    const goalStartCandidates = [goalStartDate, goalResetAt].filter((date): date is Date => Boolean(date));
+    if (goalStartCandidates.length > 0) {
+      goalCreatedAt.gte = goalStartCandidates.reduce((latest, date) => date > latest ? date : latest);
+    }
+    if (goalEndDate) {
+      goalCreatedAt.lte = goalEndDate;
+    }
+    const total = await this.prisma.donation.aggregate({
+      where: {
+        userId: overlay.userId,
+        paymentStatus: "PAID",
+        ...(Object.keys(goalCreatedAt).length > 0 ? { createdAt: goalCreatedAt } : {}),
+      },
+      _sum: { amount: true },
+    });
     const safeTheme = {
       ...theme,
       ...(streamlabs
@@ -33,7 +49,6 @@ export class OverlayService {
           }
         : {}),
     };
-    const donateGoal = typeof theme.donateGoal === "object" && theme.donateGoal ? theme.donateGoal : {};
     return {
       ...overlay,
       theme: safeTheme,
@@ -49,6 +64,16 @@ export class OverlayService {
 
   emitPaidDonation(streamerKey: string, payload: unknown) {
     this.gateway.emitDonation(streamerKey, payload);
+  }
+
+  private parseGoalDate(value: unknown, endOfDay = false) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    const raw = value.trim();
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+07:00`)
+      : new Date(raw);
+
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
   async generateThaiTts(text: string) {
