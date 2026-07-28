@@ -1216,7 +1216,7 @@ select.input option {
 }
 
 .donation-creator-copy > p:last-child {
-  white-space: pre-line;
+  white-space: normal;
 }
 
 @media (max-width: 767px) {
@@ -1908,5 +1908,140 @@ select.input option {
     width: 24px !important;
     height: 72px !important;
     flex-basis: 24px !important;
+  }
+}
+
+/* Production donation page visual lock: this intentionally sits last. */
+@media (min-width: 1200px) {
+  .donation-landing {
+    min-height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  .donation-hero {
+    grid-template-columns: 640px 676px 400px !important;
+    gap: 17px !important;
+    width: 1750px !important;
+    max-width: calc(100vw - 40px) !important;
+    min-height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .donation-creator-copy {
+    width: 640px !important;
+    height: 886px !important;
+    max-height: calc(100vh - 64px) !important;
+    align-self: center !important;
+    justify-self: end !important;
+    justify-content: flex-end !important;
+    padding: 0 0 7px 0 !important;
+    transform: none !important;
+  }
+
+  .donation-creator-copy > p:first-child {
+    margin: 0 !important;
+    font: normal normal 800 60px/91px "Noto Sans Thai", sans-serif !important;
+    letter-spacing: 0 !important;
+    color: #fff !important;
+    text-shadow: 2px 3px 2px #0000005e !important;
+  }
+
+  .donation-creator-copy > h1 {
+    width: 640px !important;
+    max-width: 640px !important;
+    margin: -8px 0 0 !important;
+    font: normal normal 800 80px/121px "Noto Sans Thai", sans-serif !important;
+    letter-spacing: 0 !important;
+    color: #fff !important;
+    text-shadow: 2px 3px 2px #0000005e !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+    text-transform: none !important;
+  }
+
+  .donation-creator-copy > p:last-child {
+    width: 585px !important;
+    max-width: 585px !important;
+    margin: -2px 0 0 !important;
+    font: normal normal 600 20px/30px "Noto Sans Thai", sans-serif !important;
+    letter-spacing: 0 !important;
+    color: #24283e !important;
+    text-shadow: none !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+
+  .donation-form-card,
+  .donation-review-card,
+  .donation-qr-card,
+  .donation-state-card {
+    width: 676px !important;
+    height: 886px !important;
+    max-height: calc(100vh - 64px) !important;
+    min-height: 0 !important;
+    align-self: center !important;
+    justify-self: center !important;
+    padding: 74px 55px 45px !important;
+    border-radius: 60px !important;
+    overflow: hidden !important;
+  }
+
+  .donation-rank-card {
+    width: 400px !important;
+    height: 886px !important;
+    max-height: calc(100vh - 64px) !important;
+    min-height: 0 !important;
+    align-self: center !important;
+    justify-self: start !important;
+    padding: 39px 39px 29px !important;
+    border-radius: 60px !important;
+    overflow: hidden !important;
+  }
+
+  .donation-message-wrap {
+    width: 565px !important;
+    height: 202px !important;
+    min-height: 202px !important;
+    max-height: 202px !important;
+  }
+
+  .donation-message {
+    height: 196px !important;
+    min-height: 196px !important;
+    max-height: 196px !important;
+  }
+
+  .donation-field[name="donorName"] {
+    font-size: 24px !important;
+    line-height: 36px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .donation-landing {
+    background-color: var(--donation-mobile-bg-color, #7d9cede6) !important;
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(125, 156, 237, 0.03) 0%,
+        rgba(125, 156, 237, 0.16) 45%,
+        color-mix(in srgb, var(--donation-mobile-bg-color, #7d9cede6) 68%, transparent) 72%,
+        var(--donation-mobile-bg-color, #7d9cede6) 100%
+      ),
+      var(--donation-mobile-bg-image, none) !important;
+    background-position: top center, top center !important;
+    background-repeat: no-repeat, no-repeat !important;
+    background-size: min(430px, 100vw) min(430px, 100vw), min(430px, 100vw) min(430px, 100vw) !important;
+  }
+
+  .donation-creator-copy > p:last-child {
+    white-space: normal !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
   }
 }

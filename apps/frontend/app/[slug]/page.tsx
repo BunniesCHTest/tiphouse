@@ -49,7 +49,7 @@ const MAX_DONOR_NAME_LENGTH = 20;
 const DEFAULT_DONOR_NAME = "แพนด้าที่ผ่านทางมา";
 const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
 const DEFAULT_DONATION_BACKGROUND = "#7D9CEDE6";
-const DEFAULT_CREATOR_DESCRIPTION = "อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไป\nด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~";
+const DEFAULT_CREATOR_DESCRIPTION = "อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไปด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
@@ -81,8 +81,7 @@ type DonationLandingStyle = CSSProperties & {
 };
 
 function fixedCreatorDescription(value?: string) {
-  const source = value?.trim() || DEFAULT_CREATOR_DESCRIPTION;
-  return source.includes("\n") ? source : source.replace(/ต่อไป\s*/, "ต่อไป\n");
+  return value?.trim() || DEFAULT_CREATOR_DESCRIPTION;
 }
 
 function donationLandingStyle(page: PageData): DonationLandingStyle {
