@@ -803,6 +803,17 @@ select.input option {
   width: 100%;
 }
 
+.donation-flow-error {
+  color: #ff765f;
+  font-family: "Noto Sans Thai", sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 12px auto -4px;
+  max-width: 565px;
+  text-align: center;
+}
+
 .donation-review-list.is-compact {
   gap: 1.2rem;
   margin-top: 0.2rem;
@@ -1964,8 +1975,8 @@ select.input option {
   }
 
   .donation-creator-copy > p:last-child {
-    width: 585px !important;
-    max-width: 585px !important;
+    width: 640px !important;
+    max-width: 640px !important;
     margin: -2px 0 0 !important;
     font: normal normal 600 20px/30px "Noto Sans Thai", sans-serif !important;
     letter-spacing: 0 !important;

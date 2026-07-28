@@ -111,6 +111,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
   const [remainingSeconds, setRemainingSeconds] = useState(600);
   const [expiredModal, setExpiredModal] = useState(false);
+  const [isCreatingQr, setIsCreatingQr] = useState(false);
   const [step, setStep] = useState<DonateStep>("form");
   const [formState, setFormState] = useState({ donorName: DEFAULT_DONOR_NAME, donorEmail: "", message: "", amount: "", anonymous: false });
   const [donorRank, setDonorRank] = useState<DonorRank[]>([]);
@@ -248,10 +249,13 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   }
 
   async function createQr() {
-    if (!page || !canDonate) return;
+    if (!page || !canDonate || isCreatingQr) return;
     const anonymous = formState.anonymous;
     const donorName = anonymous ? "Anonymous" : formState.donorName.trim();
     try {
+      setError("");
+      setPaymentStatusMessage("");
+      setIsCreatingQr(true);
       const { data } = await api.post("/donate", {
         pageSlug: page.slug,
         donorName: donorName.slice(0, MAX_DONOR_NAME_LENGTH),
@@ -264,14 +268,26 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       if (Number(data.amount) !== amountNumber || !data.transactionRef) {
         throw new Error("Donation transaction does not match the requested amount");
       }
-      if (data.paymentProvider !== "STRIPE") {
+      const paymentProvider = String(data.paymentProvider ?? data.provider ?? "STRIPE").toUpperCase();
+      if (paymentProvider !== "STRIPE") {
         throw new Error("ระบบชำระเงินยังไม่ได้ตั้งค่า Stripe กรุณาอย่าชำระเงินและแจ้ง Creator");
       }
+      const qrDataUrl =
+        data.qrDataUrl ??
+        data.qrCodeDataUrl ??
+        data.promptPayQrDataUrl ??
+        data.payment?.qrDataUrl ??
+        data.payment?.qrCodeDataUrl ??
+        data.nextAction?.promptpayDisplayQrCode?.imageUrlPng ??
+        data.next_action?.promptpay_display_qr_code?.image_url_png;
+      if (!qrDataUrl) {
+        throw new Error("ไม่สามารถสร้าง QR ชำระเงินได้ กรุณาลองใหม่อีกครั้ง");
+      }
       setQr({
-        qrDataUrl: data.qrDataUrl,
+        qrDataUrl,
         qrDisplayName: data.qrDisplayName ?? page.donationAccountName ?? "TipHouse Donate",
         transactionRef: data.transactionRef,
-        paymentProvider: data.paymentProvider,
+        paymentProvider: "STRIPE",
         amount: Number(data.amount),
         createdAt: data.createdAt,
         expiresAt: data.expiresAt,
@@ -282,7 +298,9 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
       setStep("qr");
     } catch (cause) {
       const message = (cause as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setError(Array.isArray(message) ? message.join(", ") : message ?? "ไม่สามารถสร้าง QR ได้ กรุณาตรวจสอบว่า Creator บันทึก QR รับเงินแล้ว");
+      setError(Array.isArray(message) ? message.join(", ") : message ?? "ไม่สามารถสร้าง QR ชำระเงินได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsCreatingQr(false);
     }
   }
 
@@ -529,7 +547,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     const landingStyle = donationLandingStyle(page);
 
     const sharedCreatorAside = (
-      <aside className="donation-creator-copy hidden text-left lg:block">
+      <aside className="donation-creator-copy text-left">
         <p>สนับสนุน</p>
         <h1>{page.displayName}</h1>
         <p>{creatorDescription}</p>
@@ -599,10 +617,11 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               <div className="donation-review-row is-message"><span>{t("ข้อความ", "Message")}</span><strong>{formState.message || "-"}</strong></div>
               <div className="donation-review-row"><span>{t("ยอดโดเนท", "Amount")}</span><strong>฿{summaryAmount.toLocaleString("en-US")}</strong></div>
             </div>
-            <button className="donation-state-primary" type="button" onClick={createQr}>
+            {error ? <p className="donation-flow-error">{error}</p> : null}
+            <button className="donation-state-primary" type="button" onClick={createQr} disabled={isCreatingQr} aria-busy={isCreatingQr}>
               {t("ยืนยัน", "Confirm")}
             </button>
-            <button className="donation-state-back" type="button" onClick={() => setStep("form")}>{t("ย้อนกลับ", "Back")}</button>
+            <button className="donation-state-back" type="button" onClick={() => { setError(""); setStep("form"); }}>{t("ย้อนกลับ", "Back")}</button>
           </section>
         );
       }
@@ -664,7 +683,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
     return (
       <main className="donation-landing min-h-screen" style={landingStyle}>
-        <section className="donation-hero mx-auto grid min-h-screen items-center gap-5 px-4 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(500px,560px)_minmax(270px,320px)] lg:px-8">
+        <section className="donation-hero mx-auto grid min-h-screen w-[min(1540px,100%)] items-center gap-4 px-5 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(440px,520px)_minmax(270px,320px)] lg:px-8 xl:px-10">
           {sharedCreatorAside}
           {centerContent}
           {sharedRankCard}
