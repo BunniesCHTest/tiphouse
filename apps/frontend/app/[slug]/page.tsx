@@ -362,19 +362,15 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         style={landingStyle}
       >
         <section className="donation-hero mx-auto grid min-h-screen w-[min(1540px,100%)] items-center gap-4 px-5 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(440px,520px)_minmax(270px,320px)] lg:px-8 xl:px-10">
-          <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-[6.5rem]">
-            <p className="text-4xl font-black drop-shadow-md sm:text-5xl">สนับสนุน</p>
-            <h1 className="mt-2 break-words text-5xl font-black leading-none tracking-wide drop-shadow-lg sm:text-7xl">
-              {page.displayName}
-            </h1>
-            <p className="mt-5 max-w-xl text-lg font-bold leading-relaxed text-white/90 drop-shadow-[0_3px_8px_rgba(20,28,58,.5)] sm:text-xl">
-              {creatorDescription}
-            </p>
+          <aside className="donation-creator-copy">
+            <p>สนับสนุน</p>
+            <h1>{page.displayName}</h1>
+            <p>{creatorDescription}</p>
           </aside>
 
           <form onSubmit={continueToSummary} className="donation-form-card grid gap-4">
             <label className="grid gap-2">
-              <span className="donation-label">จำนวนเงิน</span>
+              <span className="donation-label">AMOUNT</span>
               <div className={`donation-field-row ${amountTooLow || amountTooHigh ? "is-invalid" : ""}`}>
                 <input
                   className="donation-field"
@@ -409,7 +405,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </div>
 
             <label className="grid gap-2">
-              <span className="donation-label">ชื่อผู้โดเนท</span>
+              <span className="donation-label">YOUR NAME</span>
               <div className="donation-field-row">
                 <input
                   className="donation-field"
@@ -429,7 +425,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </label>
 
             <label className="donation-payer-email grid gap-2">
-              <span className="donation-label">PAYER EMAIL</span>
+              <span className="donation-label">E-mail</span>
               <input
                 className="donation-field-single"
                 name="donorEmail"
@@ -445,7 +441,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </label>
 
             <label className="grid gap-2">
-              <span className="donation-label">ข้อความถึงสตรีมเมอร์</span>
+              <span className="donation-label">Message</span>
               <div className="donation-message-wrap">
                 <textarea
                   className="donation-message"
@@ -459,7 +455,6 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               </div>
               {blockedMessage && <p className="text-sm font-black text-coral">{t("ข้อความมีคำที่ระบบไม่อนุญาต", "Message contains blocked words")}</p>}
             </label>
-            {error && <p className="font-black text-coral">{error}</p>}
             <button className="donation-continue disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canDonate} aria-label={t("ดำเนินการต่อ", "Continue")}>
               <img src="/assets/continue-button.png" alt="" className="donation-continue-default h-auto w-[min(274px,100%)]" />
               <img src="/assets/continue-button-active.png" alt="" className="donation-continue-active h-auto w-[min(274px,100%)]" />
@@ -489,7 +484,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
                 </div>
               ))}
               {Array.from({ length: emptyRankRows }, (_, index) => (
-                <div className="donation-rank-row opacity-45" key={`empty-${index}`}>
+                <div className="donation-rank-row" key={`empty-${index}`}>
                   <span className="donation-rank-number">{secondaryRankRows.length + index + 2}</span>
                   <span>-</span>
                 </div>
@@ -559,7 +554,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </div>
           ))}
           {Array.from({ length: sharedEmptyRows }).map((_, index) => (
-            <div key={`empty-${index}`} className="donation-rank-row opacity-45">
+            <div key={`empty-${index}`} className="donation-rank-row">
               <span className="donation-rank-number">{sharedSecondaryRows.length + index + 2}</span>
               <span>-</span>
             </div>
