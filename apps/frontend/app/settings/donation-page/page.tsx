@@ -14,6 +14,8 @@ type PageSettings = {
   description: string;
   slug: string;
   donationBackgroundUrl?: string;
+  mobileBackgroundUrl?: string;
+  mobileBackgroundColor: string;
   minAmount: number;
 };
 
@@ -28,6 +30,8 @@ const defaults: PageSettings = {
   description: "",
   slug: "",
   donationBackgroundUrl: "",
+  mobileBackgroundUrl: "",
+  mobileBackgroundColor: "#7D9CEDE6",
   minAmount: 20,
 };
 
@@ -64,6 +68,7 @@ function cachePageSettings(page: PageSettings) {
   const cacheable = {
     ...page,
     donationBackgroundUrl: isDataUrl(page.donationBackgroundUrl) ? "" : page.donationBackgroundUrl,
+    mobileBackgroundUrl: isDataUrl(page.mobileBackgroundUrl) ? "" : page.mobileBackgroundUrl,
   };
   try {
     localStorage.setItem(userCacheKey("page_settings"), JSON.stringify(cacheable));
@@ -88,6 +93,8 @@ export default function DonationPageSettings() {
   const [settings, setSettings] = useState<PageSettings>(defaults);
   const [backgroundPreview, setBackgroundPreview] = useState("");
   const [backgroundInputKey, setBackgroundInputKey] = useState(0);
+  const [mobileBackgroundPreview, setMobileBackgroundPreview] = useState("");
+  const [mobileBackgroundInputKey, setMobileBackgroundInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<SaveStatus | null>(null);
@@ -107,15 +114,19 @@ export default function DonationPageSettings() {
         description: res.data?.theme?.description ?? cachedSettings?.description ?? "",
         slug: res.data?.slug ?? cachedSettings?.slug ?? "",
         donationBackgroundUrl: res.data?.theme?.donationBackgroundUrl ?? cachedSettings?.donationBackgroundUrl ?? "",
+        mobileBackgroundUrl: res.data?.theme?.mobileBackgroundUrl ?? cachedSettings?.mobileBackgroundUrl ?? "",
+        mobileBackgroundColor: res.data?.theme?.mobileBackgroundColor ?? cachedSettings?.mobileBackgroundColor ?? defaults.mobileBackgroundColor,
         minAmount: res.data?.minAmount ?? cachedSettings?.minAmount ?? MIN_DONATION_AMOUNT,
       };
       setSettings(page);
       cachePageSettings(page);
       if (page.donationBackgroundUrl) setBackgroundPreview(page.donationBackgroundUrl);
+      if (page.mobileBackgroundUrl) setMobileBackgroundPreview(page.mobileBackgroundUrl);
     }).catch(() => {
       if (!cachedSettings) return;
       setSettings(cachedSettings);
       if (cachedSettings.donationBackgroundUrl) setBackgroundPreview(cachedSettings.donationBackgroundUrl);
+      if (cachedSettings.mobileBackgroundUrl) setMobileBackgroundPreview(cachedSettings.mobileBackgroundUrl);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -125,11 +136,16 @@ export default function DonationPageSettings() {
     setStatus(null);
     const form = new FormData(event.currentTarget);
     const backgroundFile = form.get("backgroundFile") instanceof File ? (form.get("backgroundFile") as File) : null;
+    const mobileBackgroundFile = form.get("mobileBackgroundFile") instanceof File ? (form.get("mobileBackgroundFile") as File) : null;
     let donationBackgroundUrl = settings.donationBackgroundUrl;
+    let mobileBackgroundUrl = settings.mobileBackgroundUrl;
+    const mobileBackgroundColor = String(form.get("mobileBackgroundColor") ?? settings.mobileBackgroundColor ?? defaults.mobileBackgroundColor).trim() || defaults.mobileBackgroundColor;
 
     try {
       validateImageFile(backgroundFile && backgroundFile.size ? backgroundFile : null);
+      validateImageFile(mobileBackgroundFile && mobileBackgroundFile.size ? mobileBackgroundFile : null);
       donationBackgroundUrl = (await readFileAsDataUrl(backgroundFile && backgroundFile.size ? backgroundFile : null)) ?? settings.donationBackgroundUrl;
+      mobileBackgroundUrl = (await readFileAsDataUrl(mobileBackgroundFile && mobileBackgroundFile.size ? mobileBackgroundFile : null)) ?? settings.mobileBackgroundUrl;
     } catch (caught) {
       setStatus({
         type: "error",
@@ -148,6 +164,8 @@ export default function DonationPageSettings() {
       theme: {
         description: String(form.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION_LENGTH),
         donationBackgroundUrl,
+        mobileBackgroundUrl,
+        mobileBackgroundColor,
       },
     };
 
@@ -158,10 +176,13 @@ export default function DonationPageSettings() {
         description: data?.theme?.description ?? payload.theme.description,
         slug: data?.slug ?? payload.slug,
         donationBackgroundUrl: data?.theme?.donationBackgroundUrl ?? payload.donationBackgroundUrl,
+        mobileBackgroundUrl: data?.theme?.mobileBackgroundUrl ?? payload.theme.mobileBackgroundUrl,
+        mobileBackgroundColor: data?.theme?.mobileBackgroundColor ?? payload.theme.mobileBackgroundColor,
         minAmount: data?.minAmount ?? payload.minAmount,
       };
       setSettings(savedPage);
       if (savedPage.donationBackgroundUrl) setBackgroundPreview(savedPage.donationBackgroundUrl);
+      if (savedPage.mobileBackgroundUrl) setMobileBackgroundPreview(savedPage.mobileBackgroundUrl);
       cachePageSettings(savedPage);
       window.dispatchEvent(new CustomEvent("tiphouse:page-updated", { detail: savedPage }));
       setStatus({
@@ -186,10 +207,22 @@ export default function DonationPageSettings() {
     setBackgroundPreview(URL.createObjectURL(file));
   }
 
+  function onMobileBackgroundChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setMobileBackgroundPreview(URL.createObjectURL(file));
+  }
+
   function clearBackground() {
     setSettings((current) => ({ ...current, donationBackgroundUrl: "" }));
     setBackgroundPreview("");
     setBackgroundInputKey((key) => key + 1);
+  }
+
+  function clearMobileBackground() {
+    setSettings((current) => ({ ...current, mobileBackgroundUrl: "" }));
+    setMobileBackgroundPreview("");
+    setMobileBackgroundInputKey((key) => key + 1);
   }
 
   return (
@@ -247,6 +280,27 @@ export default function DonationPageSettings() {
                 </div>
               )}
             </div>
+            <div>
+              <label className="font-bold">BG Mobile</label>
+              <p className="mt-1 text-sm text-white/60">แนะนำขนาด 430 x 430 px สำหรับแสดงด้านบนบนมือถือ, JPG/PNG/WebP, ไม่เกิน 5MB</p>
+              <input key={mobileBackgroundInputKey} className="input mt-2" name="mobileBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={onMobileBackgroundChange} />
+              {mobileBackgroundPreview && (
+                <div className="relative mt-3">
+                  <img alt="Mobile donation background preview" src={mobileBackgroundPreview} className="h-44 w-full rounded-lg object-cover" />
+                  <button className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-coral bg-coral text-2xl font-black leading-none text-ink shadow-lg shadow-black/30 transition hover:scale-105 hover:bg-[#ff8f7d]" type="button" aria-label="Delete mobile donation background image" title="Delete mobile donation background image" onClick={clearMobileBackground}>X</button>
+                </div>
+              )}
+            </div>
+            <label>
+              สี BG Mobile (RGB)
+              <input
+                className="input mt-2"
+                name="mobileBackgroundColor"
+                value={settings.mobileBackgroundColor}
+                onChange={(event) => setSettings({ ...settings, mobileBackgroundColor: event.target.value })}
+                placeholder="#7D9CEDE6 หรือ rgb(125, 156, 237)"
+              />
+            </label>
             <label>
               {t("ยอดโดเนทขั้นต่ำ", "Minimum Donation")}
               <input

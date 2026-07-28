@@ -216,7 +216,7 @@ export default function DashboardPage() {
     }
     return [...groups.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+      .slice(0, 10)
       .map(([name, amount], index) => ({ name, amount, rank: index + 1 }));
   }, [visibleRows]);
 
@@ -321,11 +321,12 @@ export default function DashboardPage() {
 
             <section className="card mt-5 p-5">
               <h2 className="text-2xl font-black">Top Donator Rank</h2>
-              <div className="mt-4 grid gap-3">
+              <div className="dashboard-rank-list mt-4 grid gap-3">
                 {topDonators.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                    <span className="font-bold">#{item.rank} {item.name}</span>
-                    <span className="font-black text-mint">{formatBaht(item.amount)}</span>
+                  <div key={item.name} className="donation-rank-row dashboard-rank-row">
+                    <span className={`donation-rank-number rank-${item.rank}`}>{item.rank}</span>
+                    <span className="donation-rank-name">{item.name}</span>
+                    <span className="dashboard-rank-amount">{formatBaht(item.amount)}</span>
                   </div>
                 ))}
                 {!topDonators.length && <p className="text-white/45">{t("ยังไม่มีข้อมูลอันดับผู้โดเนท", "No top donator data yet")}</p>}

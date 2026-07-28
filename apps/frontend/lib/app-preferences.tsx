@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 export type AppLanguage = "th" | "en";
 export type AppTheme = "dark" | "light";
@@ -217,12 +217,11 @@ function hasThai(text: string) {
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<AppLanguage>("th");
   const [theme, setTheme] = useState<AppTheme>("dark");
-  const originals = useRef<WeakMap<Text, string>>(new WeakMap());
 
   useEffect(() => {
     const storedLanguage = localStorage.getItem("tiphouse_language") as AppLanguage | null;
     const storedTheme = localStorage.getItem("tiphouse_theme") as AppTheme | null;
-    if (storedLanguage === "th" || storedLanguage === "en") setLanguage(storedLanguage);
+    if (storedLanguage === "en") localStorage.setItem("tiphouse_language", "th");
     if (storedTheme === "dark" || storedTheme === "light") setTheme(storedTheme);
   }, []);
 
@@ -234,53 +233,16 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   }, [language, theme]);
 
   useEffect(() => {
-    function translateTextNode(node: Text) {
-      if (shouldSkipNode(node)) return;
-      if (language === "th") {
-        if (originals.current.has(node)) node.nodeValue = originals.current.get(node) ?? node.nodeValue;
-        return;
-      }
-      const currentValue = node.nodeValue ?? "";
-      if (!hasThai(currentValue)) return;
-      if (!originals.current.has(node)) originals.current.set(node, currentValue);
-      const original = originals.current.get(node) ?? currentValue;
-      let translated = original;
-      for (const [thai, english] of Object.entries(uiDictionary)) {
-        translated = translated.replaceAll(thai, english);
-      }
-      node.nodeValue = translated;
-    }
-
-    function translateTree(root: ParentNode) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let current = walker.nextNode();
-      while (current) {
-        translateTextNode(current as Text);
-        current = walker.nextNode();
-      }
-    }
-
-    const run = () => translateTree(document.body);
-    window.setTimeout(run, 0);
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node as Text);
-          if (node.nodeType === Node.ELEMENT_NODE) translateTree(node as Element);
-        });
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [language]);
+    setLanguage("th");
+  }, []);
 
   const value = useMemo<PreferencesContextValue>(() => ({
-    language,
+    language: "th",
     theme,
-    toggleLanguage: () => setLanguage((current) => current === "th" ? "en" : "th"),
+    toggleLanguage: () => setLanguage("th"),
     toggleTheme: () => setTheme((current) => current === "dark" ? "light" : "dark"),
-    t: (th, en) => language === "th" ? th : en,
-  }), [language, theme]);
+    t: (th) => th,
+  }), [theme]);
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

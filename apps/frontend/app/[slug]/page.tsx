@@ -1,9 +1,8 @@
 "use client";
 
-import { FormEvent, use, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, FormEvent, use, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { useAppPreferences } from "@/lib/app-preferences";
 
 type PageData = {
   slug: string;
@@ -15,6 +14,8 @@ type PageData = {
   goalAmount: number;
   theme?: {
     donationBackgroundUrl?: string;
+    mobileBackgroundUrl?: string;
+    mobileBackgroundColor?: string;
     description?: string;
   } | null;
 };
@@ -36,7 +37,7 @@ type DonorRank = {
   anonymous: boolean;
 };
 
-type DonateStep = "form" | "summary" | "qr" | "verifying" | "success";
+type DonateStep = "form" | "summary" | "qr" | "verifying" | "success" | "failed";
 type RankPeriod = "week" | "month" | "all";
 
 const THAI_ANONYMOUS = "บุคคลนิรนาม";
@@ -48,6 +49,7 @@ const MAX_DONOR_NAME_LENGTH = 20;
 const DEFAULT_DONOR_NAME = "แพนด้าที่ผ่านทางมา";
 const DONOR_EMAIL_STORAGE_KEY = "tiphouse_donor_email";
 const DEFAULT_DONATION_BACKGROUND = "#7D9CEDE6";
+const DEFAULT_CREATOR_DESCRIPTION = "อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไป\nด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~";
 const extraBannedWords = ["ไอ้โง่", "ไอ้ควาย", "ไอ้เหี้ย", "ไอ้ดำ", "ไอ้เตี้ย", "อีโง่", "อีควาย", "อีเหี้ย", "โง่", "ควาย", "เหี้ย", "สัส", "สัตว์"];
 const rudePrefixPattern = /(ไอ้|อี)(โง่|ควาย|เหี้ย|สัตว์|สัส|ดำ|เตี้ย|บ้า|เวร|ห่า|ร่าน|ตอแหล)/i;
 const bannedWords = ["เหี้ย", "ควย", "สัส", "ไอ้สัตว์", "fuck", "shit", "bitch", "asshole"];
@@ -56,7 +58,7 @@ const defaultPage: PageData = {
   slug: "bunniesch",
   displayName: "CONNESE.PLAI",
   bannerUrl: null,
-  donationAccountName: "Bunnie SCH Donate",
+  donationAccountName: "BunnieSCH Donate",
   minAmount: 20,
   goalAmount: 5000,
   theme: {},
@@ -73,10 +75,37 @@ function hasBlockedWord(value: string) {
   return [...bannedWords, ...extraBannedWords].some((word) => normalized.includes(word.toLowerCase().replace(/\s+/g, "")));
 }
 
+type DonationLandingStyle = CSSProperties & {
+  "--donation-mobile-bg-color"?: string;
+  "--donation-mobile-bg-image"?: string;
+};
+
+function fixedCreatorDescription(value?: string) {
+  const source = value?.trim() || DEFAULT_CREATOR_DESCRIPTION;
+  return source.includes("\n") ? source : source.replace(/ต่อไป\s*/, "ต่อไป\n");
+}
+
+function donationLandingStyle(page: PageData): DonationLandingStyle {
+  const desktopBackground = page.theme?.donationBackgroundUrl || "";
+  const mobileBackground = page.theme?.mobileBackgroundUrl || "";
+  const mobileBackgroundColor = page.theme?.mobileBackgroundColor || DEFAULT_DONATION_BACKGROUND;
+  return {
+    backgroundColor: mobileBackgroundColor,
+    backgroundImage: desktopBackground
+      ? `linear-gradient(90deg, rgba(125, 156, 237, 0.18), rgba(125, 156, 237, 0.74)), url(${desktopBackground})`
+      : "none",
+    "--donation-mobile-bg-color": mobileBackgroundColor,
+    "--donation-mobile-bg-image": mobileBackground ? `url(${mobileBackground})` : "none",
+  };
+}
+
+function t(thai: string, _english?: string) {
+  return thai;
+}
+
 export default function DonatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const searchParams = useSearchParams();
-  const { language, t, toggleLanguage } = useAppPreferences();
   const [page, setPage] = useState<PageData | null>(null);
   const [qr, setQr] = useState<QrState | null>(null);
   const [error, setError] = useState("");
@@ -114,7 +143,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   useEffect(() => {
     if (!formState.anonymous) return;
     setFormState((current) => current.donorName ? { ...current, donorName: "" } : current);
-  }, [formState.anonymous, language]);
+  }, [formState.anonymous]);
 
   useEffect(() => {
     if (!["127.0.0.1", "localhost"].includes(window.location.hostname)) return;
@@ -177,6 +206,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             "การชำระเงินไม่สำเร็จ กรุณายกเลิกรายการและลองใหม่",
             "Payment failed. Cancel this payment and try again.",
           ));
+          setStep("failed");
         }
         if (data.status === "EXPIRED") setExpiredModal(true);
       } catch {
@@ -195,8 +225,8 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
   const effectiveMinAmount = Math.max(MIN_DONATION_AMOUNT, page?.minAmount ?? MIN_DONATION_AMOUNT);
   const amountTooLow = Boolean(page && formState.amount && amountNumber < effectiveMinAmount);
   const amountTooHigh = Boolean(formState.amount && amountNumber > 20000);
-  const anonymousLabel = t(THAI_ANONYMOUS, "Anonymous");
-  const amountPlaceholder = t("ใส่จำนวนเงิน", "Amount");
+  const anonymousLabel = THAI_ANONYMOUS;
+  const amountPlaceholder = "ใส่จำนวนเงิน";
   const displayDonorName = formState.anonymous ? anonymousLabel : formState.donorName.trim();
   const blockedName = !formState.anonymous && hasBlockedWord(formState.donorName);
   const blockedMessage = hasBlockedWord(formState.message);
@@ -261,6 +291,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     setQr(null);
     setExpiredModal(false);
     setPaymentStatusMessage("");
+    setError("");
     setStep("form");
   }
 
@@ -323,24 +354,16 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     const rankRows = donorRank.slice(0, 10);
     const secondaryRankRows = rankRows.slice(1, 10);
     const emptyRankRows = Math.max(0, 9 - secondaryRankRows.length);
-    const donationHeroImage = page.theme?.donationBackgroundUrl || "";
-    const creatorDescription = page.theme?.description || t("อยากให้ทุกคนเอ็นดูแพนด้าน่ารักคนนี้มากๆเลยนะคะ เราจะพยายามต่อไปด้วยกัน อยากเป็นเพื่อนกับคนขี้เหงาและคนชอบนอนดึกน้า~~", "Send a little support and your message to the creator you love.");
+    const creatorDescription = fixedCreatorDescription(page.theme?.description);
+    const landingStyle = donationLandingStyle(page);
     return (
       <main
         className="donation-landing min-h-screen"
-        style={{
-          backgroundColor: DEFAULT_DONATION_BACKGROUND,
-          backgroundImage: donationHeroImage
-            ? `linear-gradient(90deg, rgba(118,151,226,.08), rgba(118,151,226,.18)), url(${donationHeroImage})`
-            : "none",
-        }}
+        style={landingStyle}
       >
-        <button className="btn fixed right-4 top-4 z-30 bg-white/80 text-[#2b3146] backdrop-blur" type="button" onClick={toggleLanguage}>
-          TH/ENG
-        </button>
         <section className="donation-hero mx-auto grid min-h-screen w-[min(1540px,100%)] items-center gap-4 px-5 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(440px,520px)_minmax(270px,320px)] lg:px-8 xl:px-10">
           <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-[6.5rem]">
-            <p className="text-4xl font-black drop-shadow-md sm:text-5xl">{t("สนับสนุน", "Support")}</p>
+            <p className="text-4xl font-black drop-shadow-md sm:text-5xl">สนับสนุน</p>
             <h1 className="mt-2 break-words text-5xl font-black uppercase leading-none tracking-wide drop-shadow-lg sm:text-7xl">
               {page.displayName}
             </h1>
@@ -351,7 +374,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
 
           <form onSubmit={continueToSummary} className="donation-form-card grid gap-4">
             <label className="grid gap-2">
-              <span className="donation-label">{t("จำนวนเงิน", "AMOUNT")}</span>
+              <span className="donation-label">จำนวนเงิน</span>
               <div className={`donation-field-row ${amountTooLow || amountTooHigh ? "is-invalid" : ""}`}>
                 <input
                   className="donation-field"
@@ -386,7 +409,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </div>
 
             <label className="grid gap-2">
-              <span className="donation-label">{t("ชื่อผู้โดเนท", "YOUR NAME")}</span>
+              <span className="donation-label">ชื่อผู้โดเนท</span>
               <div className="donation-field-row">
                 <input
                   className="donation-field"
@@ -406,7 +429,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </label>
 
             <label className="donation-payer-email grid gap-2">
-              <span className="donation-label">{t("อีเมลผู้ชำระเงิน", "PAYER EMAIL")}</span>
+              <span className="donation-label">PAYER EMAIL</span>
               <input
                 className="donation-field-single"
                 name="donorEmail"
@@ -422,7 +445,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             </label>
 
             <label className="grid gap-2">
-              <span className="donation-label">{t("ข้อความถึงสตรีมเมอร์", "MESSAGE")}</span>
+              <span className="donation-label">ข้อความถึงสตรีมเมอร์</span>
               <div className="donation-message-wrap">
                 <textarea
                   className="donation-message"
@@ -448,7 +471,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
             {rankRows[0] ? (
               <div className="text-center">
                 <div className="mx-auto grid size-20 place-items-center rounded-full bg-[#c98b1f] text-5xl font-black text-white shadow-lg">1</div>
-                <h3 className="mt-3 truncate text-2xl font-black text-[#c98b1f]">{rankRows[0].anonymous ? anonymousLabel : rankRows[0].donorName}</h3>
+                <h3 className="donation-rank-top-name mt-3 text-2xl font-black text-[#c98b1f]">{rankRows[0].anonymous ? anonymousLabel : rankRows[0].donorName}</h3>
                 <div className="donation-top-strip mt-4">TOP TIPPER</div>
               </div>
             ) : (
@@ -462,7 +485,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
               {secondaryRankRows.map((item, index) => (
                 <div className="donation-rank-row" key={`${item.donorName}-${index}`}>
                   <span className={`donation-rank-number rank-${index + 2}`}>{index + 2}</span>
-                  <span className="min-w-0 truncate">{item.anonymous ? anonymousLabel : item.donorName}</span>
+                  <span className="donation-rank-name">{item.anonymous ? anonymousLabel : item.donorName}</span>
                 </div>
               ))}
               {Array.from({ length: emptyRankRows }, (_, index) => (
@@ -501,302 +524,168 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
     );
   }
 
-  return (
-    <main
-      style={page.theme?.donationBackgroundUrl ? {
-        backgroundImage: `linear-gradient(rgba(7,16,28,.82),rgba(7,16,28,.88)), url(${page.theme.donationBackgroundUrl})`,
-        backgroundAttachment: "fixed",
-        backgroundPosition: "center top",
-        backgroundSize: "cover",
-      } : { backgroundColor: DEFAULT_DONATION_BACKGROUND }}
-    >
-      <button className="btn fixed right-4 top-4 z-30 bg-ink/80 backdrop-blur" type="button" onClick={toggleLanguage}>
-        TH/ENG
-      </button>
-      <section
-        className="grid min-h-[clamp(170px,24vh,260px)] content-end bg-cover bg-center p-4 sm:p-6"
-        style={{
-          backgroundImage: page.theme?.donationBackgroundUrl
-            ? `linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.72)), url(${page.theme.donationBackgroundUrl})`
-            : "linear-gradient(rgba(125,156,237,.1),rgba(125,156,237,.48))",
-        }}
-      >
-        <div className="media-on-dark mx-auto flex w-[min(1100px,100%)] items-end gap-3 sm:gap-4">
-          <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-white/70 bg-mint text-xl font-black text-ink sm:size-20 sm:text-2xl">
-            {page.avatarUrl ? <img alt="" src={page.avatarUrl} className="size-full object-cover" /> : "TH"}
+  {
+    const sharedRankRows = donorRank.slice(0, 10);
+    const sharedTop = sharedRankRows[0];
+    const sharedSecondaryRows = sharedRankRows.slice(1, 10);
+    const sharedEmptyRows = Math.max(0, 9 - sharedSecondaryRows.length);
+    const creatorDescription = fixedCreatorDescription(page.theme?.description);
+    const summaryAmount = amountNumber || qr?.amount || 0;
+    const formattedSummaryAmount = summaryAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const landingStyle = donationLandingStyle(page);
+
+    const sharedCreatorAside = (
+      <aside className="donation-creator-copy hidden text-left lg:block">
+        <p>สนับสนุน</p>
+        <h1>{page.displayName}</h1>
+        <p>{creatorDescription}</p>
+      </aside>
+    );
+
+    const sharedRankCard = (
+      <aside className="donation-rank-card">
+        <div className="text-center">
+          <div className="mx-auto grid size-20 place-items-center rounded-full bg-[#c98b1f] text-5xl font-black text-white shadow-lg">
+            1
           </div>
-          <div>
-            <h1 className="mt-2 break-words text-3xl font-black sm:text-5xl md:text-6xl">{page.displayName}</h1>
-            {page.theme?.description && <p className="mt-2 max-w-2xl text-base font-bold text-white/80">{page.theme.description}</p>}
-          </div>
+          <h3 className="donation-rank-top-name mt-3 text-2xl font-black text-[#c98b1f]">{sharedTop ? (sharedTop.anonymous ? anonymousLabel : sharedTop.donorName) : "No Tips"}</h3>
+          <div className="donation-top-strip mt-4">TOP TIPPER</div>
         </div>
-      </section>
-      <section className="mx-auto grid w-[min(1180px,calc(100%-1.5rem))] min-w-0 gap-5 py-6 sm:w-[min(1180px,calc(100%-2rem))] sm:gap-6 sm:py-8 md:grid-cols-[minmax(340px,430px)_minmax(0,1fr)]">
-        {/*
-          <div className="phone-frame">
-            <form onSubmit={continueToSummary} className="phone-screen grid gap-4 p-5">
-              <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-5 text-ink">
-                <div className="flex items-center gap-3">
-                  <div className="grid size-14 place-items-center overflow-hidden rounded-2xl bg-white/90 text-lg font-black text-ink">
-                    {page.avatarUrl ? <img alt="" src={page.avatarUrl} className="size-full object-cover" /> : "TH"}
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-black">{page.displayName}</h2>
-                    <p className="mt-1 font-semibold opacity-75">{t("ส่งกำลังใจให้ครีเอเตอร์ที่คุณชอบ", "Send support to your favorite creator")}</p>
-                  </div>
-                </div>
-              </div>
-              <section className="draft-panel">
-                <div className="mb-3 font-black">{t("เลือกจำนวนเงิน", "Choose Amount")}</div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {quickAmounts.map((amount) => (
-                    <button
-                      key={amount}
-                      className={`btn ${amountNumber === amount ? "btn-primary" : ""}`}
-                      type="button"
-                      onClick={() => setFormState({ ...formState, amount: String(amount) })}
-                    >
-                      ฿{amount.toLocaleString("th-TH")}
-                    </button>
-                  ))}
-                </div>
-                <label className="mt-3 block">
-                  {t("กำหนดเอง", "Custom")}
-                  <input className={`input mt-2 ${amountTooLow || amountTooHigh ? "border-coral text-coral" : ""}`} name="amount" type="number" min={effectiveMinAmount} max={20000} value={formState.amount} onChange={(event) => setFormState({ ...formState, amount: event.target.value })} required />
-                  {amountTooLow && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทต้องไม่น้อยกว่า", "Minimum donation is")} ฿{effectiveMinAmount}</span>}
-                  {amountTooHigh && <span className="mt-2 block font-bold text-coral">{t("ยอดโดเนทสูงสุด 20,000 บาท", "Maximum donation is 20,000 THB")}</span>}
-                  {!amountTooLow && !amountTooHigh && <span className="mt-2 block text-sm text-white/60">{t("ขั้นต่ำ", "Minimum")} {effectiveMinAmount.toLocaleString("th-TH")} - 20,000 {t("บาท", "THB")}</span>}
-                </label>
-              </section>
-              <section className="draft-panel grid gap-3">
-                <label>
-                  {t("ชื่อผู้โดเนท", "Donor Name")}
-                  <input
-                    className="input mt-2 disabled:cursor-not-allowed disabled:opacity-75"
-                    name="donorName"
-                    value={formState.anonymous ? anonymousLabel : formState.donorName}
-                    maxLength={MAX_DONOR_NAME_LENGTH}
-                    onChange={(event) => setFormState({ ...formState, donorName: event.target.value.slice(0, MAX_DONOR_NAME_LENGTH) })}
-                    disabled={formState.anonymous}
-                    required={!formState.anonymous}
-                  />
-                </label>
-                {!formState.anonymous && <p className="text-right text-sm text-white/55">{formState.donorName.length}/{MAX_DONOR_NAME_LENGTH}</p>}
-                {blockedName && <p className="text-sm font-bold text-coral">{t("ชื่อผู้โดเนทมีคำที่ระบบไม่อนุญาต", "Donor name contains blocked words")}</p>}
-                <button className={`hidden btn justify-self-start ${formState.anonymous ? "btn-primary" : ""}`} type="button" aria-pressed={formState.anonymous} onClick={toggleAnonymous}>
-                  {t("แสดงเป็น Anonymous", "Show as Anonymous")}
-                </button>
-                <label>
-                  {t("อีเมลผู้ชำระเงิน", "Payer Email")}
-                  <input
-                    className="input mt-2"
-                    name="donorEmail"
-                    type="email"
-                    maxLength={254}
-                    value={formState.donorEmail}
-                    onChange={(event) => setFormState({ ...formState, donorEmail: event.target.value.slice(0, 254) })}
-                    placeholder="name@example.com"
-                    autoComplete="email"
-                    required
-                  />
-                  <span className="mt-2 block text-sm text-white/60">
-                    {t("อีเมลใช้เพื่อยืนยันการชำระเงินและติดต่อกรณีคืนเงิน", "Email is used for payment confirmation and refund contact.")}
-                  </span>
-                </label>
-              </section>
-              <section className="draft-panel">
-                <label>{t("ข้อความถึงสตรีมเมอร์", "Message to Streamer")}<textarea className="input mt-2 min-h-28" name="message" maxLength={250} value={formState.message} onChange={(event) => setFormState({ ...formState, message: event.target.value.slice(0, 250) })} required /></label>
-                <p className={`mt-2 text-right text-sm ${messageTooLong ? "text-coral" : "text-white/55"}`}>{formState.message.length}/250</p>
-                {blockedMessage && <p className="mt-2 text-sm font-bold text-coral">{t("ข้อความมีคำที่ระบบไม่อนุญาต", "Message contains blocked words")}</p>}
-              </section>
-              {error && <p className="text-coral">{error}</p>}
-              <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" type="submit" disabled={!canDonate}>{t("ดำเนินการต่อ", "Continue")}</button>
-            </form>
-          </div>
-        */}
-
-        {step === "summary" && (
-          <div className="phone-frame">
-            <section className="phone-screen grid gap-4 p-5">
-              <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-ink">
-                <h2 className="text-3xl font-black">{t("ตรวจสอบรายการ", "Review Donation")}</h2>
-                <p className="mt-3 font-semibold opacity-80">{t("ระบบชำระเงินเข้ารหัสและปลอดภัย ตรวจสอบรายการได้ก่อนจ่ายทุกครั้ง", "Review your secure payment before continuing")}</p>
-              </div>
-              <div className="draft-panel grid gap-3">
-                {[
-                  [t("ส่งถึง", "To"), page.displayName],
-                  [t("ชื่อที่แสดง", "Display Name"), displayDonorName],
-                  [t("อีเมลผู้ชำระเงิน", "Payer Email"), formState.donorEmail],
-                  [t("ข้อความ", "Message"), formState.message],
-                  [t("ยอดโดเนท", "Donation"), `฿${amountNumber.toLocaleString("th-TH")}`],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-start justify-between gap-4 border-b border-dashed border-white/10 pb-3 last:border-0 last:pb-0">
-                    <span className="text-white/70">{label}</span>
-                    <strong className="max-w-[55%] text-right">{value}</strong>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between pt-2">
-                  <span className="font-black">{t("ยอดชำระทั้งหมด", "Total")}</span>
-                  <strong className="text-4xl font-black text-mint">฿{amountNumber.toLocaleString("th-TH")}</strong>
-                </div>
-              </div>
-              {error && <p className="text-coral">{error}</p>}
-              <button className="btn btn-primary" type="button" onClick={createQr}>{t("ยืนยันและชำระเงิน", "Confirm and Pay")}</button>
-              <button className="btn" type="button" onClick={() => setStep("form")}>{t("กลับไปแก้ไข", "Back to Edit")}</button>
-            </section>
-          </div>
-        )}
-
-        {step === "qr" && qr && (
-          <div className="phone-frame">
-            <aside className="phone-screen grid gap-4 p-5 text-center">
-              <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-left text-ink">
-                <h2 className="text-3xl font-black">{t("ชำระเงินด้วย QR", "Pay with QR")}</h2>
-                <p className="mt-3 font-semibold opacity-80">
-                  {t("ระบบจะตรวจสอบการชำระเงินอัตโนมัติก่อนส่ง Alert", "Payment is confirmed automatically before the alert is sent.")}
-                </p>
-              </div>
-              <section className="draft-panel">
-                <p className="font-black">ยอดชำระ</p>
-                <strong className="mt-1 block text-4xl font-black text-mint">฿{qr.amount.toLocaleString("th-TH")}</strong>
-                <div className={`mx-auto mt-3 w-fit rounded-lg border px-4 py-2 font-black ${remainingSeconds <= 60 ? "border-coral/60 bg-coral/10 text-coral" : "border-sky/30 bg-sky/10 text-sky"}`}>
-                  QR หมดอายุใน {countdown}
-                </div>
-                <img alt="PromptPay QR" src={qr.qrDataUrl} className="mx-auto mt-4 size-64 rounded-2xl bg-white p-3" />
-                <button className="btn mt-4 w-full" type="button" onClick={downloadQr}>บันทึกภาพ QR เพื่อเปิดในแอปธนาคาร</button>
-                <p className="mt-3 text-sm text-white/55">{t("QR นี้ผูกกับยอดและเลขรายการด้านล่าง กรุณาตรวจสอบยอดในแอปธนาคารก่อนยืนยัน", "This QR is tied to the amount and reference below. Check the amount in your banking app before confirming.")}</p>
-              </section>
-              <section className="draft-panel text-left">
-                <h3 className="font-black">วิธีชำระเงิน</h3>
-                <div className="mt-3 grid gap-2">
-                  {["เปิดแอปธนาคาร", "สแกน QR Code หรือเลือกภาพ QR จากเครื่อง", "ชำระเงินตามยอดที่แสดง"].map((item, index) => (
-                    <div className="draft-step" key={item}>
-                      <span className="draft-step-number">{index + 1}</span>
-                      <span className="font-bold">{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="draft-panel grid gap-2 text-left">
-                <p className="font-black text-mint">{t("กำลังรอผลการชำระเงินอัตโนมัติ", "Waiting for automatic payment confirmation")}</p>
-                <p className="text-sm text-white/55">{t(
-                  "ระบบจะยืนยันการชำระเงินของท่านและจะส่ง Alert หลังการโอนเสร็จสิ้น",
-                  "Your payment will be confirmed and the alert will be sent after the transfer is complete.",
-                )}</p>
-              </section>
-              <p className="break-all text-xs text-white/55">Ref: {qr.transactionRef}</p>
-              {paymentStatusMessage && <p className="rounded-xl border border-sky/30 bg-sky/10 p-3 text-sm text-white/80">{paymentStatusMessage}</p>}
-              <div className="grid gap-3">
-                <button className="btn" type="button" onClick={resetFlow}>ยกเลิก QR code</button>
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {step === "verifying" && (
-          <div className="phone-frame">
-            <section className="phone-screen grid min-h-[620px] content-center justify-items-center gap-5 p-6 text-center">
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-sky">Secure payment verification</p>
-              <h2 className="text-3xl font-black">กำลังตรวจสอบ</h2>
-              <div className="relative grid size-40 place-items-center rounded-full border-2 border-sky/25">
-                <div className="absolute inset-[-2px] animate-spin rounded-full border-4 border-transparent border-t-mint border-r-sky" />
-                <div className="grid size-24 place-items-center rounded-full bg-sky/10 text-sm font-black text-sky">PAYMENT<br />CHECK</div>
-              </div>
-              <div>
-                <p className="font-black">กำลังตรวจสอบการชำระเงิน</p>
-                <p className="mt-2 text-white/55">กรุณารอสักครู่...</p>
-              </div>
-              <div className="flex gap-2" aria-hidden="true">
-                {[0, 1, 2, 3].map((index) => (
-                  <span key={index} className="size-2 animate-pulse rounded-full bg-sky" style={{ animationDelay: `${index * 160}ms` }} />
-                ))}
-              </div>
-              <p className="text-xs text-white/45">ห้ามปิดหน้านี้จนกว่าจะตรวจสอบเสร็จสิ้น</p>
-            </section>
-          </div>
-        )}
-
-        {step === "success" && (
-          <div className="phone-frame">
-            <section className="phone-screen grid gap-4 p-5 text-center">
-              <div className="rounded-2xl bg-gradient-to-br from-mint to-coral p-6 text-left text-ink">
-                <h2 className="text-3xl font-black">โดเนทสำเร็จแล้ว</h2>
-                <p className="mt-3 font-semibold opacity-80">ขอบคุณสำหรับการสนับสนุน</p>
-              </div>
-              <div className="mx-auto grid size-24 place-items-center rounded-[2rem] bg-gradient-to-br from-mint to-coral text-6xl font-light text-white">✓</div>
-              <h3 className="text-2xl font-black">ระบบยืนยันรายการแล้ว</h3>
-              <div className="draft-panel grid gap-3 text-left">
-                <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
-                  <span>ชื่อผู้โดเนท</span>
-                  <strong className="text-right">{displayDonorName}</strong>
-                </div>
-                {formState.message.trim() && (
-                  <div className="grid gap-1 border-b border-dashed border-white/10 pb-3">
-                    <span>ข้อความโดเนท</span>
-                    <strong className="break-words text-right">{formState.message.trim()}</strong>
-                  </div>
-                )}
-                <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
-                  <span>ยอดโดเนท</span>
-                  <strong>฿{amountNumber.toLocaleString("th-TH")}</strong>
-                </div>
-                <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-3">
-                  <span>สถานะ</span>
-                  <strong className="badge">สำเร็จ</strong>
-                </div>
-                <div className="grid gap-1">
-                  <span>เลขที่อ้างอิง</span>
-                  <strong className="break-all text-right text-mint">{qr?.transactionRef ?? "-"}</strong>
-                </div>
-              </div>
-              <button className="btn" type="button" onClick={resetFlow}>กลับไปหน้าโดเนท</button>
-            </section>
-          </div>
-        )}
-
-        <aside className="draft-band grid content-start gap-4 p-5">
-          <h2 className="text-2xl font-black">{t("วิธีการโดเนท", "How to Donate")}</h2>
-          <p className="text-white/60">{t("ทำตามขั้นตอนด้านล่างเพื่อโดเนทและส่ง Alert ไปยังสตรีมเมอร์", "Follow these steps to donate and send an alert to the streamer")}</p>
-          <div className="grid gap-2">
-            {[
-              t("เลือกยอดโดเนทและกรอกชื่อ/ข้อความ", "Choose amount and enter name/message"),
-              t("ตรวจสอบรายละเอียดก่อนชำระเงิน", "Review donation details"),
-              t("สแกน QR และชำระเงินตามยอดที่แสดง", "Scan QR and pay the exact amount"),
-              t("การโดเนทเสร็จสิ้น", "Donation completed"),
-            ].map((stepLabel, index) => (
-              <div className="draft-step" key={stepLabel}>
-                <span className="draft-step-number">{index + 1}</span>
-                <span className="font-bold">{stepLabel}</span>
-              </div>
+        <div className="donation-rank-list mt-4 grid gap-2">
+          {sharedSecondaryRows.map((row, index) => (
+            <div key={`${row.donorName}-${index}`} className="donation-rank-row">
+              <span className={`donation-rank-number rank-${index + 2}`}>{index + 2}</span>
+              <span className="donation-rank-name">{(row.anonymous ? anonymousLabel : row.donorName).slice(0, 20)}</span>
+            </div>
+          ))}
+          {Array.from({ length: sharedEmptyRows }).map((_, index) => (
+            <div key={`empty-${index}`} className="donation-rank-row opacity-45">
+              <span className="donation-rank-number">{sharedSecondaryRows.length + index + 2}</span>
+              <span>-</span>
+            </div>
+          ))}
+        </div>
+        <div className="donation-rank-actions">
+          <svg className="donation-sparkle donation-sparkle-left" width="13" height="33" viewBox="0 0 13 33" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <g opacity="0.8">
+              <path d="M6.11416 23.1955C6.15855 23.0462 6.4341 23.0462 6.47849 23.1955C7.13564 25.4066 8.86983 27.1407 11.0809 27.7979C11.2302 27.8423 11.2302 28.1178 11.0809 28.1622C8.86983 28.8194 7.13564 30.5536 6.47849 32.7646C6.4341 32.914 6.15855 32.914 6.11416 32.7646C5.45701 30.5536 3.72282 28.8194 1.51178 28.1622C1.36242 28.1178 1.36242 27.8423 1.51178 27.7979C3.72282 27.1407 5.45701 25.4066 6.11416 23.1955Z" fill="#F6D78B"/>
+              <path d="M6.16562 11.9716C6.19733 11.8649 6.39415 11.8649 6.42586 11.9716C6.89525 13.5509 8.13396 14.7896 9.71328 15.259C9.81996 15.2907 9.81996 15.4876 9.71328 15.5193C8.13396 15.9887 6.89525 17.2274 6.42586 18.8067C6.39415 18.9134 6.19733 18.9134 6.16562 18.8067C5.69623 17.2274 4.45753 15.9887 2.87821 15.5193C2.77153 15.4876 2.77153 15.2907 2.87821 15.259C4.45753 14.7896 5.69623 13.5509 6.16562 11.9716Z" fill="#F6D78B"/>
+              <path d="M6.21709 3.54557C6.23612 3.48156 6.35421 3.48156 6.37323 3.54557C6.65487 4.49316 7.39809 5.23638 8.34568 5.51802C8.40969 5.53704 8.40969 5.65513 8.34568 5.67416C7.39809 5.95579 6.65487 6.69902 6.37323 7.64661C6.35421 7.71062 6.23611 7.71062 6.21709 7.64661C5.93545 6.69902 5.19223 5.95579 4.24464 5.67416C4.18063 5.65513 4.18063 5.53704 4.24464 5.51801C5.19223 5.23638 5.93545 4.49316 6.21709 3.54557Z" fill="#F6D78B"/>
+            </g>
+          </svg>
+          <div className="flex justify-center gap-2">
+            {(["week", "month", "all"] as RankPeriod[]).map((period) => (
+              <button key={period} className={`donation-rank-filter ${rankPeriod === period ? "is-active" : ""}`} type="button" onClick={() => setRankPeriod(period)}>
+                {period === "week" ? "Week" : period === "month" ? "Month" : "All"}
+              </button>
             ))}
           </div>
-          <div id="top-donator-rank" className="mt-2 border-t border-white/10 pt-4">
-            <h3 className="text-xl font-black">Top Donator Rank</h3>
-            <div className="mt-3 grid gap-2">
-              {donorRank.slice(0, 3).map((item, index) => (
-                <div key={`${item.donorName}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-sky/20 bg-white/5 px-3 py-2">
-                  <strong className="flex min-w-0 items-center gap-2">
-                    <span className="text-xl" aria-hidden="true">{rankMedals[index]}</span>
-                    <span className="truncate">{item.anonymous ? anonymousLabel : item.donorName}</span>
-                  </strong>
-                  <strong className="shrink-0">฿{item.amount.toLocaleString(language === "en" ? "en-US" : "th-TH")}</strong>
-                </div>
-              ))}
-              {!donorRank.length && <p className="rounded-xl border border-sky/20 bg-white/5 p-3 text-sm text-white/55">เธขเธฑเธเนเธกเนเธกเธตเธเนเธญเธกเธนเธฅ Top Tippers เธเธฒเธ Streamlabs</p>}
+          <svg className="donation-sparkle donation-sparkle-right" width="13" height="33" viewBox="0 0 13 33" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <g opacity="0.8">
+              <path d="M6.11416 23.1955C6.15855 23.0462 6.4341 23.0462 6.47849 23.1955C7.13564 25.4066 8.86983 27.1407 11.0809 27.7979C11.2302 27.8423 11.2302 28.1178 11.0809 28.1622C8.86983 28.8194 7.13564 30.5536 6.47849 32.7646C6.4341 32.914 6.15855 32.914 6.11416 32.7646C5.45701 30.5536 3.72282 28.8194 1.51178 28.1622C1.36242 28.1178 1.36242 27.8423 1.51178 27.7979C3.72282 27.1407 5.45701 25.4066 6.11416 23.1955Z" fill="#F6D78B"/>
+              <path d="M6.16562 11.9716C6.19733 11.8649 6.39415 11.8649 6.42586 11.9716C6.89525 13.5509 8.13396 14.7896 9.71328 15.259C9.81996 15.2907 9.81996 15.4876 9.71328 15.5193C8.13396 15.9887 6.89525 17.2274 6.42586 18.8067C6.39415 18.9134 6.19733 18.9134 6.16562 18.8067C5.69623 17.2274 4.45753 15.9887 2.87821 15.5193C2.77153 15.4876 2.77153 15.2907 2.87821 15.259C4.45753 14.7896 5.69623 13.5509 6.16562 11.9716Z" fill="#F6D78B"/>
+              <path d="M6.21709 3.54557C6.23612 3.48156 6.35421 3.48156 6.37323 3.54557C6.65487 4.49316 7.39809 5.23638 8.34568 5.51802C8.40969 5.53704 8.40969 5.65513 8.34568 5.67416C7.39809 5.95579 6.65487 6.69902 6.37323 7.64661C6.35421 7.71062 6.23611 7.71062 6.21709 7.64661C5.93545 6.69902 5.19223 5.95579 4.24464 5.67416C4.18063 5.65513 4.18063 5.53704 4.24464 5.51801C5.19223 5.23638 5.93545 4.49316 6.21709 3.54557Z" fill="#F6D78B"/>
+            </g>
+          </svg>
+        </div>
+      </aside>
+    );
+
+    const centerContent = (() => {
+      if (step === "summary") {
+        return (
+          <section className="donation-form-card donation-review-card">
+            <div className="text-center">
+              <h2 className="donation-review-title">{t("ตรวจสอบรายการ", "Review Donation")}</h2>
+              <p className="donation-review-subtitle">{t("ตรวจสอบรายการก่อนโดเนททุกครั้ง", "Review every detail before continuing.")}</p>
+            </div>
+            <div className="donation-review-list">
+              <div className="donation-review-row"><span>Name</span><strong>{displayDonorName}</strong></div>
+              <div className="donation-review-row"><span>E-mail</span><strong>{formState.donorEmail || "-"}</strong></div>
+              <div className="donation-review-row is-message"><span>{t("ข้อความ", "Message")}</span><strong>{formState.message || "-"}</strong></div>
+              <div className="donation-review-row"><span>{t("ยอดโดเนท", "Amount")}</span><strong>฿{summaryAmount.toLocaleString("en-US")}</strong></div>
+            </div>
+            <button className="donation-state-primary" type="button" onClick={createQr}>
+              {t("ยืนยัน", "Confirm")}
+            </button>
+            <button className="donation-state-back" type="button" onClick={() => setStep("form")}>{t("ย้อนกลับ", "Back")}</button>
+          </section>
+        );
+      }
+
+      if (step === "qr") {
+        return (
+          <section className="donation-form-card donation-qr-card">
+            <div className="text-center">
+              <p className="donation-qr-label">{t("กรุณาชำระภายใน", "Please pay within")}</p>
+              <p className="donation-qr-countdown">{countdown}</p>
+            </div>
+            {qr?.qrDataUrl ? <img className="donation-qr-image" src={qr.qrDataUrl} alt="PromptPay QR" /> : <div className="donation-qr-image grid place-items-center text-sm">QR</div>}
+            <p className="donation-qr-amount">{formattedSummaryAmount} THB</p>
+            <button className="donation-state-primary" type="button" onClick={downloadQr}>{t("ชำระเงิน", "Pay")}</button>
+            <button className="donation-state-back" type="button" onClick={resetFlow}>{t("ย้อนกลับ", "Back")}</button>
+          </section>
+        );
+      }
+
+      if (step === "verifying") {
+        return (
+          <section className="donation-form-card donation-state-card">
+            <h2 className="donation-state-title">{t("กำลังตรวจสอบ", "Checking")}</h2>
+            <img className="donation-state-character" src="/assets/payment-checking.png" alt="" />
+            <p className="donation-state-copy">{t("กำลังตรวจสอบการชำระเงิน", "Checking your payment")}</p>
+            <p className="donation-state-copy is-muted">{t("กรุณารอสักครู่...", "Please wait...")}</p>
+            <div className="donation-state-dots" aria-hidden="true"><span /><span /><span /><span /><span /></div>
+            <p className="donation-state-note">{t("ห้ามปิดหน้านี้จนกว่าจะเสร็จสิ้น", "Please keep this page open until it finishes.")}</p>
+          </section>
+        );
+      }
+
+      if (step === "success") {
+        return (
+          <section className="donation-form-card donation-state-card donation-success-card">
+            <h2 className="donation-state-title">{t("สำเร็จ", "Success")}</h2>
+            <img className="donation-state-character" src="/assets/payment-success.png" alt="" />
+            <p className="donation-state-copy">{t("ขอบคุณสำหรับการสนับสนุน!", "Thank you for your support!")}</p>
+            <div className="donation-review-list is-compact">
+              <div className="donation-review-row"><span>{t("จำนวนเงิน", "Amount")}</span><strong>{formattedSummaryAmount} THB</strong></div>
+              <div className="donation-review-row"><span>{t("จากคุณ", "From")}</span><strong>{displayDonorName}</strong></div>
+            </div>
+            <button className="donation-state-primary" type="button" onClick={resetFlow}>{t("กลับหน้าหลัก", "Back Home")}</button>
+          </section>
+        );
+      }
+
+      return (
+        <section className="donation-form-card donation-state-card donation-failed-card">
+          <h2 className="donation-state-title">{t("ชำระเงินไม่สำเร็จ", "Payment Failed")}</h2>
+          <img className="donation-state-character is-failed" src="/assets/payment-failed.png" alt="" />
+          <p className="donation-state-copy">{t("การชำระเงินของคุณ อาจประสบปัญหาบางอย่าง", "Your payment may have run into a problem.")}</p>
+          <p className="donation-state-copy is-muted">{t("กรุณาทำรายการใหม่หรือติดต่อเจ้าหน้าที่", "Please try again or contact support.")}</p>
+          <button className="donation-state-primary" type="button" onClick={resetFlow}>{t("กลับหน้าหลัก", "Back Home")}</button>
+          <a className="donation-state-primary is-blue" href="mailto:support@tiphouse.local">{t("ติดต่อเจ้าหน้าที่", "Contact Support")}</a>
+        </section>
+      );
+    })();
+
+    return (
+      <main className="donation-landing min-h-screen" style={landingStyle}>
+        <section className="donation-hero mx-auto grid min-h-screen items-center gap-5 px-4 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(500px,560px)_minmax(270px,320px)] lg:px-8">
+          {sharedCreatorAside}
+          {centerContent}
+          {sharedRankCard}
+        </section>
+        {expiredModal && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+            <div className="max-w-sm rounded-[2rem] border border-white/15 bg-white p-6 text-center text-ink shadow-2xl">
+              <p className="text-2xl font-black">{t("QR Code หมดอายุ", "QR Code Expired")}</p>
+              <p className="mt-2 text-sm text-ink/70">{t("กรุณาสร้างรายการโดเนทใหม่อีกครั้ง", "Please create a new donation request.")}</p>
+              <button className="donation-state-primary mt-5" type="button" onClick={() => { setExpiredModal(false); resetFlow(); }}>{t("ปิด", "Close")}</button>
             </div>
           </div>
-        </aside>
-      </section>
-      {expiredModal && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4">
-          <section className="card w-[min(420px,100%)] p-6 text-center" role="alertdialog" aria-modal="true" aria-labelledby="qr-expired-title">
-            <p className="font-black text-coral">EXPIRED</p>
-            <h2 id="qr-expired-title" className="mt-2 text-3xl font-black">QR Code หมดอายุ</h2>
-            <p className="mt-3 text-white/60">รายการนี้เกินเวลา 10 นาที กรุณาสร้างรายการโดเนทใหม่</p>
-            <button className="btn btn-primary mt-6 w-full" type="button" onClick={resetFlow}>ปิด</button>
-          </section>
-        </div>
-      )}
-    </main>
-  );
+        )}
+      </main>
+    );
+  }
+
 }

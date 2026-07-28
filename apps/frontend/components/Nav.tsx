@@ -9,7 +9,7 @@ import { useAppPreferences } from "@/lib/app-preferences";
 
 export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
   const router = useRouter();
-  const { language, theme, toggleLanguage, toggleTheme, t } = useAppPreferences();
+  const { theme, toggleTheme, t } = useAppPreferences();
   const [loggedIn, setLoggedIn] = useState(false);
   const [role, setRole] = useState("");
   const [approved, setApproved] = useState(false);
@@ -95,7 +95,6 @@ export function Nav({ publicOnly = false }: { publicOnly?: boolean }) {
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/donation-page">{t("ตั้งค่าหน้าโดเนท", "Donation Settings")}</Link>}
         {showAppMenu && approved && <Link className="btn min-h-9 px-3 py-1" href="/settings/overlay">{t("ตั้งค่า Overlay", "Overlay Settings")}</Link>}
         {showAppMenu && <button className="btn min-h-9 px-3 py-1" type="button" onClick={logout}>Logout</button>}
-        <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleLanguage}>{language === "th" ? "TH/ENG" : "ENG/TH"}</button>
         <button className="btn btn-danger min-h-9 px-3 py-1" type="button" onClick={toggleTheme}>{theme === "dark" ? "Light" : "Dark"}</button>
       </nav>
     </header>
