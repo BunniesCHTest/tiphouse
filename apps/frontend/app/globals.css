@@ -1922,7 +1922,34 @@ select.input option {
   }
 }
 
-/* Production donation page visual lock: this intentionally sits last. */
+/* Review step message field: keeps the message value aligned to the left under the "ข้อความ" label. */
+.donation-review-row.is-message {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+
+.donation-review-row.is-message span,
+.donation-review-row.is-message strong {
+  width: 100% !important;
+  justify-self: auto !important;
+  text-align: left !important;
+}
+
+.donation-review-row.is-message strong {
+  display: block !important;
+  white-space: pre-wrap !important;
+}
+
+/* Donation page XD control map:
+   - .donation-hero moves the 3 main columns: left creator text, center workflow card, right Top Tipper card.
+   - .donation-creator-copy controls the สนับสนุน / creator name / Description block at the bottom-left.
+   - .donation-form-card, .donation-review-card, .donation-qr-card, and .donation-state-card control the center card size on every donation step.
+   - .donation-rank-card and .donation-rank-* control the Top Tipper card, row spacing, filter buttons, and stars.
+   Keep this block last so local and production use the same spacing. */
 @media (min-width: 1200px) {
   .donation-landing {
     min-height: 100vh !important;
@@ -1944,7 +1971,7 @@ select.input option {
   .donation-creator-copy {
     width: 640px !important;
     height: 886px !important;
-    max-height: calc(100vh - 64px) !important;
+    max-height: none !important;
     align-self: center !important;
     justify-self: end !important;
     justify-content: flex-end !important;
@@ -1993,7 +2020,7 @@ select.input option {
   .donation-state-card {
     width: 676px !important;
     height: 886px !important;
-    max-height: calc(100vh - 64px) !important;
+    max-height: none !important;
     min-height: 0 !important;
     align-self: center !important;
     justify-self: center !important;
@@ -2005,7 +2032,7 @@ select.input option {
   .donation-rank-card {
     width: 400px !important;
     height: 886px !important;
-    max-height: calc(100vh - 64px) !important;
+    max-height: none !important;
     min-height: 0 !important;
     align-self: center !important;
     justify-self: start !important;

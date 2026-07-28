@@ -81,7 +81,8 @@ type DonationLandingStyle = CSSProperties & {
 };
 
 function fixedCreatorDescription(value?: string) {
-  return value?.trim() || DEFAULT_CREATOR_DESCRIPTION;
+  const source = value?.trim() || DEFAULT_CREATOR_DESCRIPTION;
+  return source.replace(/<br\s*\/?>/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 function donationLandingStyle(page: PageData): DonationLandingStyle {
