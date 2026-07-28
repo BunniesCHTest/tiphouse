@@ -1520,3 +1520,130 @@ select.input option {
     color: #24283e !important;
   }
 }
+
+/* XD precision donation layout corrections 2026-07-28 */
+@media (min-width: 1200px) {
+  .donation-creator-copy > h1 {
+    text-transform: none !important;
+  }
+
+  .donation-creator-copy > p:last-child {
+    margin-top: 12px !important;
+  }
+
+  .donation-message-wrap {
+    width: 565px !important;
+    height: 202px !important;
+    min-height: 202px !important;
+  }
+
+  .donation-message {
+    height: 196px !important;
+    min-height: 196px !important;
+  }
+
+  .donation-continue {
+    width: 344px !important;
+    height: 78px !important;
+    margin: 10px auto 0 !important;
+    padding-top: 0 !important;
+  }
+
+  .donation-continue img,
+  .donation-image-button,
+  .donation-state-primary {
+    width: 344px !important;
+    max-width: 344px !important;
+    height: 78px !important;
+    min-height: 78px !important;
+    object-fit: contain !important;
+  }
+
+  .donation-review-list {
+    margin-top: 30px !important;
+  }
+
+  .donation-state-primary {
+    display: grid !important;
+    place-items: center !important;
+    margin: 28px auto 0 !important;
+    border-radius: 14px !important;
+    font-size: 38px !important;
+    font-weight: 800 !important;
+    line-height: 58px !important;
+  }
+
+  .donation-state-back {
+    display: block !important;
+    margin: 12px auto 0 !important;
+    color: #24283e !important;
+    font-size: 28px !important;
+    font-weight: 800 !important;
+    line-height: 42px !important;
+    text-align: center !important;
+  }
+
+  .donation-rank-list {
+    gap: 7px !important;
+    padding-left: 0 !important;
+    margin-top: 18px !important;
+  }
+
+  .donation-rank-row {
+    grid-template-columns: 49px minmax(0, 1fr) !important;
+    gap: 29px !important;
+    min-height: 39px !important;
+  }
+
+  .donation-rank-number {
+    width: 49px !important;
+    height: 36px !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #7d9ced !important;
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    line-height: 36px !important;
+    text-align: center !important;
+  }
+
+  .donation-rank-number.rank-2,
+  .donation-rank-number.rank-3 {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 999px !important;
+    color: #ffffff !important;
+    line-height: 42px !important;
+  }
+
+  .donation-rank-number.rank-2 {
+    background: #9fc21d !important;
+  }
+
+  .donation-rank-number.rank-3 {
+    background: #83a2f4 !important;
+  }
+
+  .donation-rank-name,
+  .donation-rank-row > span:last-child {
+    max-width: 20ch !important;
+    font-size: 20px !important;
+    line-height: 30px !important;
+  }
+
+  .donation-rank-actions {
+    width: calc(100% + 44px) !important;
+    margin: auto -22px 0 !important;
+    gap: 10px !important;
+  }
+
+  .donation-sparkle {
+    width: 25px !important;
+    height: 76px !important;
+    flex: 0 0 25px !important;
+  }
+
+  .donation-sparkle path {
+    fill: #ffa30070 !important;
+  }
+}

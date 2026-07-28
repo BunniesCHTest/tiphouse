@@ -364,7 +364,7 @@ export default function DonatePage({ params }: { params: Promise<{ slug: string 
         <section className="donation-hero mx-auto grid min-h-screen w-[min(1540px,100%)] items-center gap-4 px-5 py-8 lg:grid-cols-[minmax(520px,1fr)_minmax(440px,520px)_minmax(270px,320px)] lg:px-8 xl:px-10">
           <aside className="donation-creator-copy media-on-dark self-end pb-6 lg:pb-[6.5rem]">
             <p className="text-4xl font-black drop-shadow-md sm:text-5xl">สนับสนุน</p>
-            <h1 className="mt-2 break-words text-5xl font-black uppercase leading-none tracking-wide drop-shadow-lg sm:text-7xl">
+            <h1 className="mt-2 break-words text-5xl font-black leading-none tracking-wide drop-shadow-lg sm:text-7xl">
               {page.displayName}
             </h1>
             <p className="mt-5 max-w-xl text-lg font-bold leading-relaxed text-white/90 drop-shadow-[0_3px_8px_rgba(20,28,58,.5)] sm:text-xl">
