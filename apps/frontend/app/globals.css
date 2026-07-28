@@ -1631,16 +1631,27 @@ select.input option {
     line-height: 30px !important;
   }
 
+  .donation-rank-card {
+    position: relative !important;
+  }
+
   .donation-rank-actions {
-    width: calc(100% + 44px) !important;
-    margin: auto -22px 0 !important;
+    position: absolute !important;
+    right: 22.45px !important;
+    bottom: 20px !important;
+    left: 26px !important;
+    width: auto !important;
+    margin: 0 !important;
     gap: 10px !important;
+    padding: 0 !important;
   }
 
   .donation-sparkle {
     width: 25px !important;
     height: 76px !important;
     flex: 0 0 25px !important;
+    align-self: flex-end !important;
+    opacity: 1 !important;
   }
 
   .donation-sparkle path {
