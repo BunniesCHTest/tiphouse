@@ -844,7 +844,7 @@ select.input option {
 .donation-review-row > strong {
   color: #24283e;
   font-weight: 800;
-  max-width: 68%;
+  max-width: 100%;
   overflow-wrap: anywhere;
   text-align: right;
 }
